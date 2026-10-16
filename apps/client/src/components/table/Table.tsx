@@ -75,13 +75,25 @@ export function Table({ view, events, clockOffset, layout, onSit, headline, cent
     const point = layout.seatPoint(k, count);
     const isHero = k === 0 && mySeat !== null;
     // Le héros a ses grandes cartes devant lui : sa mise passe au-dessus, le bouton à gauche.
-    const bet = along(point, layout.focus, isHero ? 0.55 : layout.betRatio);
+    const betOrigin =
+      layout.betFromPlate && !isHero
+        ? {
+            x: point.x,
+            y: point.y - seatLayout.anchorY + seatLayout.plateTop + seatLayout.plateHeight / 2,
+          }
+        : point;
+    const bet = along(betOrigin, layout.focus, isHero ? 0.55 : layout.betRatio);
     const dealer: Point = isHero
       ? {
           x: layout.hero.cardsCx - layout.hero.spread - layout.hero.cardW / 2 - 24,
           y: layout.hero.cardsTop + layout.hero.cardH * 0.3,
         }
-      : along(point, layout.focus, layout.dealerRatio);
+      : layout.dealerBesideAvatar
+        ? {
+            x: point.x - seatLayout.avatar / 2 - 16,
+            y: point.y - seatLayout.anchorY + seatLayout.avatar * 0.45,
+          }
+        : along(point, layout.focus, layout.dealerRatio);
     return { k, point, bet, dealer, isHero };
   };
 
@@ -143,7 +155,10 @@ export function Table({ view, events, clockOffset, layout, onSit, headline, cent
           >
             <span className="flex items-baseline gap-2 rounded-full bg-black/40 px-5 py-1.5">
               <span className="text-lg text-text-2">Pot</span>
-              <span className="font-display tabular text-[28px] font-bold leading-none text-text">
+              <span
+                className="font-display tabular font-bold leading-none text-text"
+                style={{ fontSize: layout.name === 'desktop' ? 28 : 22 }}
+              >
                 {formatChips(potTotal)}
               </span>
             </span>

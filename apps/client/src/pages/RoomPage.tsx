@@ -131,7 +131,13 @@ function GameScreen({ view, events, log, clockOffset, connected }: GameScreenPro
         )}
 
         <div className="absolute z-50" style={{ left: layout.actions.x, top: layout.actions.y }}>
-          <ActionBar view={view} busy={busy} onAction={onAction} width={layout.actions.w} />
+          <ActionBar
+            view={view}
+            busy={busy}
+            onAction={onAction}
+            width={layout.actions.w}
+            compact={mobile}
+          />
           {view.you.canRebuy && (
             <Button
               variant="gold"

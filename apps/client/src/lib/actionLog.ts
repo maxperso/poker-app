@@ -26,7 +26,7 @@ export function describeEvents(events: GameEvent[], view: RoomView): string[] {
         const allIn = event.allIn ? ' (tapis)' : '';
         const text = {
           fold: `${who} se couche`,
-          check: `${who} parle`,
+          check: `${who} check`,
           call: `${who} suit ${amount}`,
           bet: `${who} mise ${amount}`,
           raise: `${who} relance à ${amount}`,

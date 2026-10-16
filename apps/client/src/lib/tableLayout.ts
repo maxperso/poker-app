@@ -59,6 +59,10 @@ export interface StageLayout {
   /** Position de la mise et du bouton dealer sur le trajet siège → centre (0 à 1). */
   betRatio: number;
   dealerRatio: number;
+  /** Le trajet de la mise part du centre du cartouche (et non du point d'ellipse). */
+  betFromPlate: boolean;
+  /** Bouton dealer collé à gauche de l'avatar plutôt que sur le trajet vers le centre. */
+  dealerBesideAvatar: boolean;
 }
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -74,7 +78,7 @@ export const DESKTOP: StageLayout = {
     height: 90,
     anchorY: 40,
     avatar: 46,
-    plateTop: 40,
+    plateTop: 44,
     plateHeight: 46,
     name: 14,
     stack: 17,
@@ -102,51 +106,56 @@ export const DESKTOP: StageLayout = {
   focus: { x: 640, y: 340 },
   betRatio: 0.42,
   dealerRatio: 0.2,
+  betFromPlate: false,
+  dealerBesideAvatar: false,
 };
 
 export const MOBILE: StageLayout = {
   name: 'mobile',
+  // Ratio ≈ fenêtre utile d'un téléphone en portrait (barres du navigateur déduites).
   width: 430,
-  height: 900,
+  height: 800,
   topBar: 52,
-  table: { cx: 215, cy: 330, width: 290, height: 480, rail: 14, innerInset: 30 },
+  table: { cx: 215, cy: 300, width: 290, height: 440, rail: 14, innerInset: 28 },
   seat: {
     width: 104,
     height: 74,
     anchorY: 32,
     avatar: 36,
-    plateTop: 32,
+    plateTop: 34,
     plateHeight: 40,
     name: 12,
     stack: 15,
     cardW: 22,
     cardH: 31,
   },
-  board: { cx: 215, cy: 322, cardW: 42, cardH: 59, gap: 6 },
-  potY: 266,
-  watermarkY: 384,
+  board: { cx: 215, cy: 312, cardW: 42, cardH: 59, gap: 6 },
+  potY: 242,
+  watermarkY: 370,
   hero: {
     cardsCx: 215,
-    cardsTop: 556,
-    cardW: 86,
-    cardH: 120,
-    spread: 40,
-    panel: { x: 95, y: 676, w: 240, h: 60 },
+    cardsTop: 498,
+    cardW: 80,
+    cardH: 112,
+    spread: 38,
+    panel: { x: 100, y: 604, w: 230, h: 58 },
   },
-  history: { x: 18, y: 752, w: 394 },
-  actions: { x: 12, y: 748, w: 406 },
+  history: { x: 18, y: 676, w: 394 },
+  actions: { x: 12, y: 670, w: 406 },
   // Portrait : on laisse libre le bas de l'ovale (réservé au héros) et on répartit
   // les adversaires sur les 270° restants.
   seatPoint: (k, count) => {
-    if (k === 0) return { x: 215, y: 600 };
+    if (k === 0) return { x: 215, y: 540 };
     const angle = count === 2 ? 270 : 135 + ((k - 1) * 270) / (count - 2);
     const a = toRad(angle);
-    return { x: 215 + 158 * Math.cos(a), y: 330 + 246 * Math.sin(a) };
+    return { x: 215 + 158 * Math.cos(a), y: 300 + 216 * Math.sin(a) };
   },
-  focus: { x: 215, y: 330 },
-  // Sièges plus proches du centre qu'en bureau : mise et bouton un peu plus loin des plaques.
-  betRatio: 0.45,
+  focus: { x: 215, y: 300 },
+  // Table étroite : la mise part du centre du cartouche pour passer sous celui-ci.
+  betRatio: 0.55,
   dealerRatio: 0.3,
+  betFromPlate: true,
+  dealerBesideAvatar: true,
 };
 
 /** Point situé à `ratio` du trajet de `from` vers `to`. */

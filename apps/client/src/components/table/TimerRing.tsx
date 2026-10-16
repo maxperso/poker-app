@@ -11,12 +11,17 @@ interface TimerRingProps {
   children: ReactNode;
 }
 
+/** Épaisseur de l'anneau : l'enveloppe fait `size + 2 × épaisseur`, avatar centré dedans. */
+export function ringThickness(size: number): number {
+  return Math.max(3, Math.round(size * 0.08));
+}
+
 /**
  * Anneau de timer autour de l'avatar : un `conic-gradient` or qui se vide.
  * Motion fait varier une valeur animée (pas un état React) : pas de re-rendu à chaque image.
  */
 export function TimerRing({ size, deadline, totalMs, clockOffset, children }: TimerRingProps) {
-  const thickness = Math.max(3, Math.round(size * 0.08));
+  const thickness = ringThickness(size);
   const progress = useMotionValue(1);
   const background = useTransform(
     progress,

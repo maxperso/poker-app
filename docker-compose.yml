@@ -1,0 +1,22 @@
+# Déploiement derrière Nginx Proxy Manager (NPM).
+#
+# Le conteneur ne publie aucun port sur la machine : NPM le joint directement par un
+# réseau Docker partagé, à l'adresse http://poker:3000. Voir README.md, « Déploiement ».
+services:
+  poker:
+    build: .
+    image: poker-interco:latest
+    container_name: poker
+    restart: unless-stopped
+    networks:
+      - proxy
+    # Si NPM tourne sur une autre machine (ou hors Docker), publier le port à la place :
+    # ports:
+    #   - "3000:3000"
+
+networks:
+  proxy:
+    # Réseau de Nginx Proxy Manager, créé par son propre docker-compose.
+    # Son nom se trouve avec `docker network ls` ; à mettre dans .env (NPM_NETWORK=...).
+    external: true
+    name: ${NPM_NETWORK:-npm_default}

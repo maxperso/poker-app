@@ -9,6 +9,8 @@ interface ActionBarProps {
   busy: boolean;
   onAction: (action: PlayerAction) => void;
   width: number;
+  /** Téléphone : boutons un peu moins hauts. */
+  compact?: boolean;
 }
 
 /**
@@ -24,7 +26,7 @@ export function ActionBar(props: ActionBarProps) {
   return <ActionBarInner key={`${hand.handNumber}-${hand.street}-${hand.currentBet}`} {...props} />;
 }
 
-function ActionBarInner({ view, busy, onAction, width }: ActionBarProps) {
+function ActionBarInner({ view, busy, onAction, width, compact = false }: ActionBarProps) {
   const legal = view.you.legal!;
   const hand = view.hand!;
   const me = view.seats[view.you.seat!]!;
@@ -49,14 +51,15 @@ function ActionBarInner({ view, busy, onAction, width }: ActionBarProps) {
     : [];
 
   const isAllIn = raise !== null && amount >= raise.max;
-  const raiseLabel = isAllIn ? 'Tapis' : hand.currentBet === 0 ? 'Miser' : 'Relancer';
+  // Libellés d'action en anglais, comme on les dit autour d'une table.
+  const raiseLabel = isAllIn ? 'All-in' : hand.currentBet === 0 ? 'Bet' : 'Raise';
   const raiseAction: PlayerAction = isAllIn ? { type: 'allIn' } : { type: 'raise', to: amount };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col gap-3"
+      className={`flex flex-col ${compact ? 'gap-2' : 'gap-3'}`}
       style={{ width }}
     >
       {raise && (
@@ -70,7 +73,9 @@ function ActionBarInner({ view, busy, onAction, width }: ActionBarProps) {
                   type="button"
                   disabled={busy}
                   onClick={() => setAmount(s.value)}
-                  className={`font-display h-11 rounded-[10px] border text-xl font-semibold transition ${
+                  className={`font-display rounded-[10px] border text-xl font-semibold transition ${
+                    compact ? 'h-[38px]' : 'h-11'
+                  } ${
                     active
                       ? 'border-gold bg-gold text-on-gold'
                       : 'border-gold-soft text-gold-light hover:border-gold'
@@ -98,21 +103,37 @@ function ActionBarInner({ view, busy, onAction, width }: ActionBarProps) {
       )}
 
       <div className={`grid gap-2.5 ${raise ? 'grid-cols-[1fr_1fr_1.15fr]' : 'grid-cols-2'}`}>
-        <ActionButton tone="fold" disabled={busy} onClick={() => onAction({ type: 'fold' })}>
-          Se coucher
+        <ActionButton
+          tone="fold"
+          compact={compact}
+          disabled={busy}
+          onClick={() => onAction({ type: 'fold' })}
+        >
+          Fold
         </ActionButton>
         {legal.canCheck ? (
-          <ActionButton tone="call" disabled={busy} onClick={() => onAction({ type: 'check' })}>
-            Parole
+          <ActionButton
+            tone="call"
+            compact={compact}
+            disabled={busy}
+            onClick={() => onAction({ type: 'check' })}
+          >
+            Check
           </ActionButton>
         ) : (
-          <ActionButton tone="call" disabled={busy} onClick={() => onAction({ type: 'call' })}>
-            Suivre {formatChips(legal.callAmount)}
+          <ActionButton
+            tone="call"
+            compact={compact}
+            disabled={busy}
+            onClick={() => onAction({ type: 'call' })}
+          >
+            Call {formatChips(legal.callAmount)}
           </ActionButton>
         )}
         {raise && (
           <ActionButton
             tone="raise"
+            compact={compact}
             disabled={busy || amount < raise.min || amount > raise.max}
             onClick={() => onAction(raiseAction)}
           >
@@ -132,13 +153,16 @@ const TONES = {
 
 function ActionButton({
   tone,
+  compact,
   ...props
-}: { tone: keyof typeof TONES } & ButtonHTMLAttributes<HTMLButtonElement>) {
+}: { tone: keyof typeof TONES; compact: boolean } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
       {...props}
-      className={`font-display tabular h-14 whitespace-nowrap rounded-[10px] px-2 text-[23px] font-bold uppercase tracking-[0.03em] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${TONES[tone]}`}
+      className={`font-display tabular whitespace-nowrap rounded-[10px] px-2 font-bold uppercase tracking-[0.03em] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
+        compact ? 'h-[50px] text-[21px]' : 'h-14 text-[23px]'
+      } ${TONES[tone]}`}
     />
   );
 }

@@ -1,0 +1,7 @@
+node_modules
+**/node_modules
+**/dist
+.git
+design_docs
+*.log
+.env

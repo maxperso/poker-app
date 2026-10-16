@@ -29,7 +29,7 @@ const ERRORS: Record<ClientError, string> = {
   NO_HAND: 'Aucune main en cours.',
   HAND_COMPLETE: 'La main est terminée.',
   NOT_YOUR_TURN: 'Ce n’est pas ton tour.',
-  CANNOT_CHECK: 'Impossible de parler : il y a une mise à suivre.',
+  CANNOT_CHECK: 'Impossible de checker : il y a une mise à suivre.',
   NOTHING_TO_CALL: 'Rien à suivre.',
   CANNOT_RAISE: 'Relance impossible.',
 };

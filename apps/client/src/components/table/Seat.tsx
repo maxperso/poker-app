@@ -4,7 +4,7 @@ import { formatChips } from '../../lib/format';
 import type { StageLayout } from '../../lib/tableLayout';
 import { Avatar } from './Avatar';
 import { PlayingCard } from './PlayingCard';
-import { TimerRing } from './TimerRing';
+import { ringThickness, TimerRing } from './TimerRing';
 
 export interface SeatProps {
   seat: SeatView;
@@ -52,8 +52,10 @@ export function Seat({
     >
       {/* Avatar (avec anneau de timer à son tour). */}
       <div
-        className="absolute left-1/2 top-0 z-20 -translate-x-1/2"
-        style={{ marginTop: turn ? -4 : 0 }}
+        className="absolute left-1/2 z-20 -translate-x-1/2"
+        // L'anneau déborde autour de l'avatar : on le remonte d'autant pour que l'avatar
+        // occupe exactement le haut de la boîte, au-dessus du cartouche.
+        style={{ top: -ringThickness(layout.avatar) }}
       >
         <TimerRing
           size={layout.avatar}
