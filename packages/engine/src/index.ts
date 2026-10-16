@@ -2,3 +2,5 @@
 export * from './cards';
 export * from './evaluator';
 export * from './pots';
+export * from './hand';
+export * from './table';
