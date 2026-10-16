@@ -50,12 +50,12 @@ L'image contient le serveur et le client buildé : un seul processus, un seul po
    ```
 
 4. Dans Nginx Proxy Manager, ajouter un **Proxy Host** :
-   - Domain : `poker.ton-domaine.fr`
+   - Domain : `poker.maxperso.fr`
    - Scheme `http`, Forward Hostname `poker`, Forward Port `3000`
    - **Websockets Support : activé** (indispensable pour Socket.io)
    - Onglet SSL : certificat Let's Encrypt, « Force SSL »
 
-Vérifier : `https://poker.ton-domaine.fr/healthz` doit répondre `{"ok":true,...}`.
+Vérifier : `https://poker.maxperso.fr/healthz` doit répondre `{"ok":true,...}`.
 
 Si NPM tourne sur une autre machine, décommenter `ports` dans `docker-compose.yml`
 et faire pointer NPM vers `IP-du-serveur:3000`.
