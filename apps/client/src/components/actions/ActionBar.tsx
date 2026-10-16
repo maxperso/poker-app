@@ -8,40 +8,30 @@ interface ActionBarProps {
   view: RoomView;
   busy: boolean;
   onAction: (action: PlayerAction) => void;
-  compact: boolean;
+  width: number;
 }
 
 /**
- * Se coucher / Check-Suivre / Miser-Relancer, avec un slider et des raccourcis.
- * Le client ne calcule rien de décisif : il propose les bornes reçues du serveur
- * (`view.you.legal`) et envoie une intention. Le serveur revalide tout.
+ * Barre d'actions (DESIGN.md §2), visible seulement quand c'est au tour du héros.
+ * Le client ne décide rien : il propose les bornes reçues du serveur (`view.you.legal`)
+ * et envoie une intention ; le serveur revalide tout.
  */
-export function ActionBar({ view, busy, onAction, compact }: ActionBarProps) {
-  const legal = view.you.legal;
+export function ActionBar(props: ActionBarProps) {
+  const { view } = props;
   const hand = view.hand;
-  const me = view.you.seat === null ? null : view.seats[view.you.seat];
-  if (!legal || !hand || !me) return null;
-
-  return (
-    <ActionBarInner
-      // Nouvelle décision (nouvelle mise à suivre, nouvelle rue) → slider réinitialisé.
-      key={`${hand.handNumber}-${hand.street}-${hand.currentBet}`}
-      view={view}
-      busy={busy}
-      onAction={onAction}
-      compact={compact}
-    />
-  );
+  if (!view.you.legal || !hand || view.you.seat === null) return null;
+  // Nouvelle décision (nouvelle mise à suivre, nouvelle rue) → curseur réinitialisé.
+  return <ActionBarInner key={`${hand.handNumber}-${hand.street}-${hand.currentBet}`} {...props} />;
 }
 
-function ActionBarInner({ view, busy, onAction, compact }: ActionBarProps) {
+function ActionBarInner({ view, busy, onAction, width }: ActionBarProps) {
   const legal = view.you.legal!;
   const hand = view.hand!;
   const me = view.seats[view.you.seat!]!;
   const raise = legal.raise;
   const [amount, setAmount] = useState(raise?.min ?? 0);
 
-  // Taille du pot après avoir suivi : pots ramassés + toutes les mises de la rue + ce qu'on doit.
+  // Pot après avoir suivi : pots ramassés + mises de la rue + ce que je dois.
   const toCall = Math.max(0, hand.currentBet - me.bet);
   const potAfterCall =
     hand.pots.reduce((sum, p) => sum + p.amount, 0) +
@@ -51,92 +41,73 @@ function ActionBarInner({ view, busy, onAction, compact }: ActionBarProps) {
     raise ? Math.min(raise.max, Math.max(raise.min, Math.round(value))) : 0;
   const shortcuts = raise
     ? [
+        { label: 'Min', value: raise.min },
         { label: '½ pot', value: clamp(hand.currentBet + potAfterCall / 2) },
         { label: 'Pot', value: clamp(hand.currentBet + potAfterCall) },
         { label: 'Tapis', value: raise.max },
       ]
     : [];
 
-  const isBet = hand.currentBet === 0;
   const isAllIn = raise !== null && amount >= raise.max;
-  const callIsAllIn = legal.callAmount > 0 && legal.callAmount >= me.stack;
-
+  const raiseLabel = isAllIn ? 'Tapis' : hand.currentBet === 0 ? 'Miser' : 'Relancer';
   const raiseAction: PlayerAction = isAllIn ? { type: 'allIn' } : { type: 'raise', to: amount };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex w-full flex-col gap-2 rounded-2xl border border-line bg-panel/95 p-3 shadow-2xl backdrop-blur"
+      className="flex flex-col gap-3"
+      style={{ width }}
     >
       {raise && (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-1.5">
-            {shortcuts.map((s) => (
-              <button
-                key={s.label}
-                type="button"
-                disabled={busy}
-                onClick={() => setAmount(s.value)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                  amount === s.value ? 'bg-gold text-ink' : 'bg-panel-2 text-white/85 hover:bg-line'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
+        <>
+          <div className="grid grid-cols-4 gap-2">
+            {shortcuts.map((s) => {
+              const active = amount === s.value;
+              return (
+                <button
+                  key={s.label}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setAmount(s.value)}
+                  className={`font-display h-11 rounded-[10px] border text-xl font-semibold transition ${
+                    active
+                      ? 'border-gold bg-gold text-on-gold'
+                      : 'border-gold-soft text-gold-light hover:border-gold'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex items-center gap-4">
+            <span className="text-[15px] text-text-3">Mise</span>
             <input
-              type="number"
-              inputMode="numeric"
+              type="range"
+              className="bet-slider flex-1"
               min={raise.min}
               max={raise.max}
+              step={Math.max(1, view.blinds.small)}
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value))}
-              onBlur={() => setAmount(clamp(amount))}
-              className="tabular ml-auto w-24 rounded-lg border border-line bg-ink px-2 py-1 text-right text-sm font-semibold text-white outline-none focus:border-gold"
-              aria-label="Montant de la relance"
+              aria-label="Montant de la mise"
             />
-          </div>
-          <input
-            type="range"
-            className="raise-slider w-full"
-            min={raise.min}
-            max={raise.max}
-            step={Math.max(1, view.blinds.small)}
-            value={amount}
-            onChange={(e) => setAmount(Number(e.target.value))}
-            aria-label="Montant de la relance"
-          />
-        </div>
+          </label>
+        </>
       )}
 
-      <div className={`grid gap-2 ${raise ? 'grid-cols-3' : 'grid-cols-2'}`}>
-        <ActionButton
-          tone="fold"
-          disabled={busy}
-          onClick={() => onAction({ type: 'fold' })}
-          compact={compact}
-        >
+      <div className={`grid gap-2.5 ${raise ? 'grid-cols-[1fr_1fr_1.15fr]' : 'grid-cols-2'}`}>
+        <ActionButton tone="fold" disabled={busy} onClick={() => onAction({ type: 'fold' })}>
           Se coucher
         </ActionButton>
         {legal.canCheck ? (
-          <ActionButton
-            tone="call"
-            disabled={busy}
-            onClick={() => onAction({ type: 'check' })}
-            compact={compact}
-          >
-            Check
+          <ActionButton tone="call" disabled={busy} onClick={() => onAction({ type: 'check' })}>
+            Parole
           </ActionButton>
         ) : (
-          <ActionButton
-            tone="call"
-            disabled={busy}
-            onClick={() => onAction({ type: 'call' })}
-            compact={compact}
-          >
-            {callIsAllIn ? 'Suivre (tapis)' : 'Suivre'}
-            <Amount value={legal.callAmount} />
+          <ActionButton tone="call" disabled={busy} onClick={() => onAction({ type: 'call' })}>
+            Suivre {formatChips(legal.callAmount)}
           </ActionButton>
         )}
         {raise && (
@@ -144,10 +115,8 @@ function ActionBarInner({ view, busy, onAction, compact }: ActionBarProps) {
             tone="raise"
             disabled={busy || amount < raise.min || amount > raise.max}
             onClick={() => onAction(raiseAction)}
-            compact={compact}
           >
-            {isAllIn ? 'Tapis' : isBet ? 'Miser' : 'Relancer à'}
-            <Amount value={amount} />
+            {raiseLabel} {formatChips(amount)}
           </ActionButton>
         )}
       </div>
@@ -155,33 +124,21 @@ function ActionBarInner({ view, busy, onAction, compact }: ActionBarProps) {
   );
 }
 
-function Amount({ value }: { value: number }) {
-  return (
-    <span className="tabular block text-[0.8em] font-bold opacity-90">{formatChips(value)}</span>
-  );
-}
-
 const TONES = {
-  fold: 'bg-[#3b1d22] text-[#fca5a5] hover:bg-[#4c232a] border-[#5b2a31]',
-  call: 'bg-[#16321f] text-[#86efac] hover:bg-[#1c3f27] border-[#245133]',
-  raise: 'bg-gold text-ink hover:brightness-110 border-[#c99a2e]',
+  fold: 'bg-fold text-text hover:brightness-125',
+  call: 'bg-call text-white hover:brightness-110',
+  raise: 'bg-gold text-on-gold hover:brightness-110',
 };
 
 function ActionButton({
   tone,
-  children,
-  compact,
   ...props
-}: { tone: keyof typeof TONES; compact: boolean } & ButtonHTMLAttributes<HTMLButtonElement>) {
+}: { tone: keyof typeof TONES } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
       {...props}
-      className={`flex flex-col items-center justify-center rounded-xl border font-semibold leading-tight transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
-        compact ? 'min-h-12 px-2 text-sm' : 'min-h-14 px-3 text-[15px]'
-      } ${TONES[tone]}`}
-    >
-      {children}
-    </button>
+      className={`font-display tabular h-14 whitespace-nowrap rounded-[10px] px-2 text-[23px] font-bold uppercase tracking-[0.03em] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${TONES[tone]}`}
+    />
   );
 }

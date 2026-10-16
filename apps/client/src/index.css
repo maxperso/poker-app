@@ -1,23 +1,35 @@
 @import 'tailwindcss';
 
+/* Charte « Club classique » (design_docs/DESIGN.md §1). */
 @theme {
-  --color-ink: #0a0e13;
-  --color-panel: #121820;
-  --color-panel-2: #1a222c;
-  --color-line: #263140;
-  --color-muted: #8b98a8;
-  --color-felt-light: #2a8a55;
-  --color-felt: #1b6b3f;
-  --color-felt-dark: #0e4127;
-  --color-rail: #2a1a10;
-  --color-rail-light: #4a2f1c;
-  --color-gold: #f2c14e;
-  --color-turn: #fbbf24;
-  --color-danger: #ef4444;
-  --color-success: #34d399;
+  --color-page-center: #18261e;
+  --color-page-edge: #0a0f0c;
+  --color-surface: #15120e;
+  --color-field: #0c0a08;
+  --color-text: #f2efe6;
+  --color-text-2: #bdb8aa;
+  --color-text-3: #8f8a7c;
+  --color-gold: #d4a64a;
+  --color-gold-light: #ecd49c;
+  --color-gold-amount: #e2b961;
+  --color-on-gold: #14110c;
+  --color-felt-1: #237e4e;
+  --color-felt-2: #155c37;
+  --color-felt-3: #0e4127;
+  --color-wood: #3a2416;
+  --color-wood-edge: #1c110a;
+  --color-call: #1f7a4a;
+  --color-fold: #3a3631;
+  --color-chip: #b8322a;
+  --color-back-1: #7a1f2b;
+  --color-back-2: #5c1520;
+  --color-live-bg: rgba(31, 122, 74, 0.3);
+  --color-live-text: #9ee0b8;
+  --color-wait-bg: rgba(212, 166, 74, 0.18);
+  --color-danger: #e0786b;
 
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: 'Barlow', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Barlow Condensed', 'Barlow', ui-sans-serif, system-ui, sans-serif;
 }
 
 html,
@@ -27,17 +39,31 @@ body,
 }
 
 body {
-  background: var(--color-ink);
-  color: #e7edf4;
+  background: radial-gradient(
+      ellipse at 50% 30%,
+      var(--color-page-center),
+      var(--color-page-edge) 75%
+    )
+    fixed var(--color-page-edge);
+  color: var(--color-text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
 
-/* Les montants s'alignent proprement : chiffres à chasse fixe. */
+/* Titres, montants et libellés de boutons d'action. */
+.font-display {
+  font-family: var(--font-display);
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Bordure or discrète. */
+.border-gold-soft {
+  border-color: rgba(212, 166, 74, 0.3);
 }
 
 /* Retournement des cartes en 3D. */
@@ -49,27 +75,38 @@ body {
   -webkit-backface-visibility: hidden;
 }
 
-/* Curseur du slider de relance. */
-input[type='range'].raise-slider {
-  appearance: none;
+/* Dos de carte : rayures à 45°, liseré clair. */
+.card-back {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--color-back-1) 0 4px,
+    var(--color-back-2) 4px 8px
+  );
+  border: 2px solid var(--color-text);
+}
+
+/* Jeton : disque rouge, bordure pointillée claire. */
+.chip {
+  background: var(--color-chip);
+  border: 2px dashed var(--color-text);
+  border-radius: 9999px;
+  box-shadow: 0 0 0 1.5px var(--color-chip);
+}
+
+/* Curseur de mise. */
+input[type='range'].bet-slider {
+  accent-color: var(--color-gold);
   height: 6px;
-  border-radius: 9999px;
-  background: var(--color-line);
 }
-input[type='range'].raise-slider::-webkit-slider-thumb {
+
+select.field-select {
   appearance: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 9999px;
-  background: var(--color-gold);
-  border: 3px solid #0a0e13;
-  cursor: pointer;
-}
-input[type='range'].raise-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 9999px;
-  background: var(--color-gold);
-  border: 3px solid #0a0e13;
-  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-text-2) 50%),
+    linear-gradient(135deg, var(--color-text-2) 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) 50%,
+    calc(100% - 14px) 50%;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
 }

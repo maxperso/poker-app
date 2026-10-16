@@ -1,331 +1,320 @@
 import type { Card } from '@poker/engine';
 import type { GameEvent, RoomView } from '@poker/shared';
 import { AnimatePresence, motion } from 'motion/react';
-import { type ReactNode, useMemo, useRef } from 'react';
-import { useElementSize } from '../../hooks/useElementSize';
+import type { ReactNode } from 'react';
 import { formatChips } from '../../lib/format';
-import { displayIndex, ellipsePositions } from '../../lib/seatLayout';
-import { Chips } from './Chips';
+import { along, type Point, type StageLayout, seatOffset } from '../../lib/tableLayout';
+import { Bet, Chip } from './Chips';
 import { CardSlot, PlayingCard } from './PlayingCard';
 import { EmptySeat, Seat } from './Seat';
-
-interface TableProps {
-  view: RoomView;
-  events: GameEvent[];
-  clockOffset: number;
-  onSit: (seat: number) => void;
-  /** Contenu affiché au centre sous le board (attente, compte à rebours…). */
-  center: ReactNode;
-}
 
 const DEAL_STEP = 0.07;
 const STREET_STEP = 0.8;
 
-/**
- * La table vue de dessus. Tout est positionné en pixels à partir de la taille mesurée
- * du conteneur : tapis ovale centré, sièges répartis sur son bord, mises entre chaque
- * siège et le centre, board et pot au milieu. En portrait (téléphone), l'ovale est vertical.
- */
-export function Table({ view, events, clockOffset, onSit, center }: TableProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const { width: w, height: h } = useElementSize(ref);
-  const hand = view.hand;
-  const seatCount = view.seats.length;
-  const mySeat = view.you.seat;
-
-  // --- Géométrie -------------------------------------------------------------------------
-  const portrait = w < h;
-  const aspect = portrait ? 0.62 : 2.05;
-  const feltW = Math.max(
-    0,
-    Math.min(portrait ? w * 0.66 : w * 0.8, (portrait ? h * 0.8 : h * 0.66) * aspect),
-  );
-  const feltH = feltW / aspect;
-  const rx = feltW / 2;
-  const ry = feltH / 2;
-  const cx = w / 2;
-  const cy = h / 2;
-  const plateW = Math.round(
-    Math.min(160, Math.max(portrait ? 92 : 108, feltW * (portrait ? 0.3 : 0.135))),
-  );
-  const boardCardW = Math.round(Math.min(68, Math.max(30, portrait ? feltW * 0.15 : feltW * 0.07)));
-  const boardCardH = Math.round(boardCardW * 1.4);
-  const potY = cy - boardCardH / 2 - 22;
-
-  const layout = useMemo(() => {
-    const points = ellipsePositions(seatCount, rx || 1, ry || 1);
-    return Array.from({ length: seatCount }, (_, seat) => {
-      const p = points[displayIndex(seat, mySeat, seatCount)]!;
-      const seatX = cx + p.x * rx * 1.03;
-      const seatY = cy + p.y * ry * 1.05;
-      const betX = cx + p.x * rx * 0.64;
-      const betY = cy + p.y * ry * 0.6;
-      // Bouton dealer : collé à la plaque de son joueur, côté tapis, et décalé sur le côté
-      // pour ne pas recouvrir ses cartes (centrées sur la plaque).
-      const toCenterLength = Math.hypot(cx - seatX, cy - seatY) || 1;
-      const ux = (cx - seatX) / toCenterLength;
-      const uy = (cy - seatY) / toCenterLength;
-      const plateH = plateW * 0.36 + 8;
-      const extent = (Math.abs(ux) * plateW) / 2 + (Math.abs(uy) * plateH) / 2;
-      const sideways = Math.abs(ux) > Math.abs(uy);
-      // Côtés gauche/droit : décalage vers le bas (les cartes sont au-dessus) ; haut/bas : vers la droite.
-      let vx = -uy;
-      let vy = ux;
-      if ((sideways && vy < 0) || (!sideways && vx < 0)) {
-        vx = -vx;
-        vy = -vy;
-      }
-      const shift = sideways ? plateH * 0.55 : plateW * 0.42;
-      const buttonX = seatX + ux * (extent + 14) + vx * shift;
-      const buttonY = seatY + uy * (extent + 14) + vy * shift;
-      return { p, seatX, seatY, betX, betY, buttonX, buttonY };
-    });
-  }, [seatCount, rx, ry, cx, cy, mySeat, plateW]);
-
-  // --- Animations dérivées des événements du dernier message -----------------------------
-  const animation = useMemo(() => {
-    const dealt = events.find((e) => e.type === 'holeCardsDealt');
-    const dealDelays = new Map<number, [number, number]>();
-    if (dealt?.type === 'holeCardsDealt') {
-      const order = dealt.seats;
-      order.forEach((seat, index) => {
-        dealDelays.set(seat, [index * DEAL_STEP, (order.length + index) * DEAL_STEP]);
-      });
-    }
-    const boardDelays = new Map<Card, number>();
-    let streets = 0;
-    for (const event of events) {
-      if (event.type !== 'boardDealt') continue;
-      event.cards.forEach((card, i) => boardDelays.set(card, streets * STREET_STEP + i * 0.12));
-      streets++;
-    }
-    return { dealDelays, boardDelays, awardDelay: streets * STREET_STEP + 0.7 };
-  }, [events]);
-
-  // --- Résultat de la main ---------------------------------------------------------------
-  const result = hand?.isComplete ? hand.result : null;
+/** Gains, mains montrées et cartes gagnantes de la main qui vient de se terminer. */
+export function handOutcome(view: RoomView) {
+  const result = view.hand?.isComplete ? view.hand.result : null;
   const winnings = new Map<number, number>();
   for (const award of result?.awards ?? []) {
-    for (const winner of award.winners) {
-      winnings.set(winner.seat, (winnings.get(winner.seat) ?? 0) + winner.amount);
-    }
+    for (const w of award.winners) winnings.set(w.seat, (winnings.get(w.seat) ?? 0) + w.amount);
   }
   const showdown = new Map(result?.showdown.map((s) => [s.seat, s]) ?? []);
   const winningCards = new Set<string>(
     [...winnings.keys()].flatMap((seat) => showdown.get(seat)?.cards ?? []),
   );
+  return { result, winnings, showdown, winningCards };
+}
 
-  const dealer = view.buttonSeat === null ? undefined : layout[view.buttonSeat];
+/** Retards d'animation déduits des événements du dernier message. */
+function animationTimings(events: GameEvent[]) {
+  const dealDelays = new Map<number, [number, number]>();
+  const dealt = events.find((e) => e.type === 'holeCardsDealt');
+  if (dealt?.type === 'holeCardsDealt') {
+    dealt.seats.forEach((seat, i) => {
+      dealDelays.set(seat, [i * DEAL_STEP, (dealt.seats.length + i) * DEAL_STEP]);
+    });
+  }
+  const boardDelays = new Map<Card, number>();
+  let streets = 0;
+  for (const event of events) {
+    if (event.type !== 'boardDealt') continue;
+    event.cards.forEach((card, i) => boardDelays.set(card, streets * STREET_STEP + i * 0.12));
+    streets++;
+  }
+  return { dealDelays, boardDelays, awardDelay: streets * STREET_STEP + 0.7 };
+}
+
+interface TableProps {
+  view: RoomView;
+  events: GameEvent[];
+  clockOffset: number;
+  layout: StageLayout;
+  onSit: (seat: number) => void;
+  /** À la place du pot (résultat de la main). */
+  headline: ReactNode;
+  /** Sous le board (attente, détail du résultat…). */
+  center: ReactNode;
+}
+
+export function Table({ view, events, clockOffset, layout, onSit, headline, center }: TableProps) {
+  const { table, board, seat: seatLayout } = layout;
+  const hand = view.hand;
+  const count = view.seats.length;
+  const mySeat = view.you.seat;
+  const timings = animationTimings(events);
+  const { result, winnings, showdown, winningCards } = handOutcome(view);
   const membersById = new Map(view.members.map((m) => [m.publicId, m]));
   const potTotal = hand?.pots.reduce((sum, pot) => sum + pot.amount, 0) ?? 0;
+  const radius = Math.min(table.width, table.height) / 2;
+  const left = table.cx - table.width / 2;
+  const top = table.cy - table.height / 2;
+
+  /** Positions d'un siège réel : point d'ellipse, mise, bouton dealer. */
+  const placeOf = (seat: number) => {
+    const k = seatOffset(seat, mySeat, count);
+    const point = layout.seatPoint(k, count);
+    const isHero = k === 0 && mySeat !== null;
+    // Le héros a ses grandes cartes devant lui : sa mise passe au-dessus, le bouton à gauche.
+    const bet = along(point, layout.focus, isHero ? 0.55 : layout.betRatio);
+    const dealer: Point = isHero
+      ? {
+          x: layout.hero.cardsCx - layout.hero.spread - layout.hero.cardW / 2 - 24,
+          y: layout.hero.cardsTop + layout.hero.cardH * 0.3,
+        }
+      : along(point, layout.focus, layout.dealerRatio);
+    return { k, point, bet, dealer, isHero };
+  };
 
   return (
-    <div ref={ref} className="relative h-full w-full overflow-hidden">
-      {w > 0 && (
-        <>
-          {/* Tapis : bordure (rail) + feutrine avec un léger dégradé. */}
-          <div
-            className="absolute rounded-[50%]"
-            style={{
-              left: cx - rx - 14,
-              top: cy - ry - 14,
-              width: feltW + 28,
-              height: feltH + 28,
-              background: 'linear-gradient(180deg, var(--color-rail-light), var(--color-rail))',
-              boxShadow: '0 30px 80px rgba(0,0,0,0.65), inset 0 2px 0 rgba(255,255,255,0.08)',
-            }}
-          />
-          <div
-            className="absolute rounded-[50%]"
-            style={{
-              left: cx - rx,
-              top: cy - ry,
-              width: feltW,
-              height: feltH,
-              background:
-                'radial-gradient(ellipse at 50% 40%, var(--color-felt-light) 0%, var(--color-felt) 55%, var(--color-felt-dark) 100%)',
-              boxShadow: 'inset 0 0 40px rgba(0,0,0,0.55)',
-            }}
-          />
-          <div
-            className="pointer-events-none absolute rounded-[50%] border border-white/[0.07]"
-            style={{
-              left: cx - rx * 0.9,
-              top: cy - ry * 0.86,
-              width: feltW * 0.9,
-              height: feltH * 0.86,
-            }}
-          />
+    <>
+      {/* Table : rebord bois + liseré extérieur, tapis en dégradé, liseré intérieur. */}
+      <div
+        className="absolute"
+        style={{
+          left,
+          top,
+          width: table.width,
+          height: table.height,
+          borderRadius: radius,
+          background: 'var(--color-wood)',
+          boxShadow: '0 0 0 3px var(--color-wood-edge), 0 30px 70px rgba(0,0,0,0.6)',
+        }}
+      >
+        <div
+          className="absolute"
+          style={{
+            inset: table.rail,
+            borderRadius: radius - table.rail,
+            background:
+              'radial-gradient(ellipse at 50% 45%, var(--color-felt-1) 0%, var(--color-felt-2) 60%, var(--color-felt-3) 100%)',
+            boxShadow: 'inset 0 0 30px rgba(0,0,0,0.45)',
+          }}
+        />
+        <div
+          className="pointer-events-none absolute border border-white/[0.09]"
+          style={{ inset: table.innerInset, borderRadius: radius - table.innerInset }}
+        />
+      </div>
 
-          {/* Pot (déjà ramassé) au-dessus du board. */}
-          <div
+      <div
+        className={`font-display pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-bold uppercase text-white/[0.08] transition-opacity ${
+          center ? 'opacity-0' : ''
+        }`}
+        style={{
+          left: board.cx,
+          top: layout.watermarkY,
+          fontSize: layout.name === 'desktop' ? 30 : 18,
+          letterSpacing: '0.5em',
+        }}
+      >
+        Poker Interco
+      </div>
+
+      {/* Pot. */}
+      <AnimatePresence>
+        {potTotal > 0 && (
+          <motion.div
+            key="pot"
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
             className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
-            style={{ left: cx, top: potY }}
+            style={{ left: board.cx, top: layout.potY }}
           >
-            <AnimatePresence>
-              {potTotal > 0 && (
-                <motion.div
-                  key="pot"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center gap-2"
-                >
-                  <span className="text-xs font-medium uppercase tracking-wider text-white/60">
-                    Pot
-                  </span>
-                  <Chips amount={potTotal} size={16} />
-                </motion.div>
-              )}
-            </AnimatePresence>
-            {(hand?.pots.length ?? 0) > 1 && (
-              <div className="tabular text-[11px] text-white/60">
-                {hand!.pots
+            <span className="flex items-baseline gap-2 rounded-full bg-black/40 px-5 py-1.5">
+              <span className="text-lg text-text-2">Pot</span>
+              <span className="font-display tabular text-[28px] font-bold leading-none text-text">
+                {formatChips(potTotal)}
+              </span>
+            </span>
+            {hand && hand.pots.length > 1 && (
+              <span className="tabular text-xs text-text-2">
+                {hand.pots
                   .map(
-                    (pot, i) => (i === 0 ? 'Principal ' : `Side ${i} `) + formatChips(pot.amount),
+                    (pot, i) => `${i === 0 ? 'Principal' : `Side ${i}`} ${formatChips(pot.amount)}`,
                   )
                   .join(' · ')}
+              </span>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Cartes communes. */}
+      <div
+        data-testid="board"
+        className="absolute flex -translate-x-1/2 -translate-y-1/2"
+        style={{ left: board.cx, top: board.cy, gap: board.gap }}
+      >
+        {Array.from({ length: 5 }, (_, i) => {
+          const card = hand?.board[i];
+          if (!card || !hand)
+            return <CardSlot key={`slot-${i}`} width={board.cardW} height={board.cardH} />;
+          const delay = timings.boardDelays.get(card);
+          return (
+            <PlayingCard
+              key={`${hand.handNumber}-${i}`}
+              card={card}
+              width={board.cardW}
+              height={board.cardH}
+              flipIn={delay !== undefined}
+              delay={delay ?? 0}
+              highlighted={winningCards.has(card)}
+            />
+          );
+        })}
+      </div>
+
+      {/* Résultat de la main, à la place du pot. */}
+      {headline && (
+        <div
+          className="absolute z-40 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap"
+          style={{ left: board.cx, top: layout.potY }}
+        >
+          {headline}
+        </div>
+      )}
+
+      {/* Sous le board : attente, détail du résultat, compte à rebours. */}
+      <div
+        className="absolute z-40 flex -translate-x-1/2 flex-col items-center gap-2 text-center"
+        style={{
+          left: board.cx,
+          top: board.cy + board.cardH / 2 + 16,
+          width: Math.min(table.width - 80, 520),
+        }}
+      >
+        {center}
+      </div>
+
+      {/* Mises du tour : à la fin du tour d'enchères, elles glissent vers le pot. */}
+      <AnimatePresence>
+        {view.seats.map((seat, index) => {
+          if (!seat || seat.bet <= 0 || !hand) return null;
+          const { bet } = placeOf(index);
+          return (
+            <motion.div
+              key={`${hand.handNumber}-${hand.street}-${index}`}
+              className="absolute z-30 -translate-x-1/2 -translate-y-1/2"
+              style={{ left: bet.x, top: bet.y }}
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+              exit={{
+                x: board.cx - bet.x,
+                y: layout.potY - bet.y,
+                opacity: 0,
+                scale: 0.7,
+                transition: { duration: 0.45, ease: 'easeIn' },
+              }}
+            >
+              <Bet amount={seat.bet} size={layout.name === 'desktop' ? 20 : 15} />
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+
+      {/* Gains : des jetons partent du pot vers chaque gagnant. */}
+      {result &&
+        hand &&
+        [...winnings].map(([seat]) => {
+          const { point, isHero } = placeOf(seat);
+          const target = isHero
+            ? { x: layout.hero.panel.x + 40, y: layout.hero.panel.y + 30 }
+            : point;
+          return (
+            <motion.div
+              key={`${hand.handNumber}-win-${seat}`}
+              className="pointer-events-none absolute z-50 -translate-x-1/2 -translate-y-1/2"
+              style={{ left: board.cx, top: layout.potY }}
+              initial={{ x: 0, y: 0, opacity: 0 }}
+              animate={{ x: target.x - board.cx, y: target.y - layout.potY, opacity: [0, 1, 1, 0] }}
+              transition={{
+                delay: timings.awardDelay,
+                duration: 1.1,
+                ease: 'easeInOut',
+                opacity: { times: [0, 0.1, 0.8, 1], delay: timings.awardDelay, duration: 1.1 },
+              }}
+            >
+              <div className="flex -space-x-2">
+                <Chip size={22} />
+                <Chip size={22} />
+                <Chip size={22} />
               </div>
+            </motion.div>
+          );
+        })}
+
+      {/* Bouton dealer : entre le joueur et le centre, plus près du joueur que sa mise. */}
+      {view.buttonSeat !== null && view.seats[view.buttonSeat] && (
+        <motion.div
+          className="absolute z-30 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#f6f3ea] font-display font-bold text-on-gold shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
+          style={{ width: 28, height: 28, fontSize: 15 }}
+          initial={false}
+          animate={{
+            left: placeOf(view.buttonSeat).dealer.x,
+            top: placeOf(view.buttonSeat).dealer.y,
+          }}
+          transition={{ type: 'spring', stiffness: 120, damping: 18 }}
+        >
+          D
+        </motion.div>
+      )}
+
+      {/* Sièges des adversaires (et de tous, pour un spectateur). */}
+      {view.seats.map((seat, index) => {
+        const { point, isHero } = placeOf(index);
+        if (isHero) return null;
+        const boxLeft = point.x - seatLayout.width / 2;
+        const boxTop = point.y - seatLayout.anchorY;
+        return (
+          <div key={index} className="absolute z-20" style={{ left: boxLeft, top: boxTop }}>
+            {seat ? (
+              <Seat
+                seat={seat}
+                member={membersById.get(seat.publicId)}
+                layout={seatLayout}
+                toCenter={{ x: layout.focus.x - point.x, y: layout.focus.y - point.y }}
+                handNumber={seat.inHand && hand ? hand.handNumber : null}
+                dealDelays={timings.dealDelays.get(index) ?? null}
+                turn={
+                  hand && !hand.isComplete && hand.toAct === index && view.turnDeadline !== null
+                    ? {
+                        deadline: view.turnDeadline,
+                        totalMs: view.config.turnSeconds * 1000,
+                        clockOffset,
+                      }
+                    : null
+                }
+                handName={showdown.get(index)?.name ?? null}
+                winnings={winnings.get(index) ?? 0}
+                bestCards={winnings.has(index) ? (showdown.get(index)?.cards ?? []) : []}
+              />
+            ) : (
+              <EmptySeat layout={seatLayout} canSit={mySeat === null} onSit={() => onSit(index)} />
             )}
           </div>
-
-          {/* Board. */}
-          <div
-            className="absolute flex -translate-x-1/2 -translate-y-1/2"
-            style={{ left: cx, top: cy, gap: Math.round(boardCardW * 0.12) }}
-          >
-            {Array.from({ length: 5 }, (_, i) => {
-              const card = hand?.board[i];
-              if (!card || !hand) return <CardSlot key={`slot-${i}`} width={boardCardW} />;
-              const delay = animation.boardDelays.get(card);
-              return (
-                <PlayingCard
-                  key={`${hand.handNumber}-${i}`}
-                  card={card}
-                  width={boardCardW}
-                  flipIn={delay !== undefined}
-                  delay={delay ?? 0}
-                  highlighted={winningCards.has(card)}
-                />
-              );
-            })}
-          </div>
-
-          {/* Messages au centre (attente, compte à rebours, résultat). */}
-          <div
-            className="absolute flex -translate-x-1/2 flex-col items-center gap-2 text-center"
-            style={{ left: cx, top: cy + boardCardH / 2 + 12, width: Math.min(feltW * 0.8, 360) }}
-          >
-            {center}
-          </div>
-
-          {/* Mises devant chaque joueur : à la fin du tour d'enchères, elles glissent vers le pot. */}
-          <AnimatePresence>
-            {view.seats.map((seat, index) => {
-              if (!seat || seat.bet <= 0 || !hand) return null;
-              const { betX, betY } = layout[index]!;
-              return (
-                <motion.div
-                  key={`${hand.handNumber}-${hand.street}-${index}`}
-                  className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: betX, top: betY }}
-                  initial={{ opacity: 0, scale: 0.6 }}
-                  animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
-                  exit={{
-                    x: cx - betX,
-                    y: potY - betY,
-                    opacity: 0,
-                    scale: 0.7,
-                    transition: { duration: 0.45, ease: 'easeIn' },
-                  }}
-                >
-                  <Chips amount={seat.bet} size={portrait ? 14 : 17} />
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-
-          {/* Gains : les jetons partent du pot vers le(s) gagnant(s). */}
-          {result &&
-            hand &&
-            [...winnings].map(([seat, amount]) => {
-              const { seatX, seatY } = layout[seat]!;
-              return (
-                <motion.div
-                  key={`${hand.handNumber}-win-${seat}`}
-                  className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: cx, top: potY }}
-                  initial={{ x: 0, y: 0, opacity: 0 }}
-                  animate={{ x: seatX - cx, y: seatY - potY, opacity: [0, 1, 1, 0] }}
-                  transition={{
-                    delay: animation.awardDelay,
-                    duration: 1.1,
-                    ease: 'easeInOut',
-                    opacity: {
-                      times: [0, 0.1, 0.8, 1],
-                      delay: animation.awardDelay,
-                      duration: 1.1,
-                    },
-                  }}
-                >
-                  <Chips amount={amount} size={16} label={false} />
-                </motion.div>
-              );
-            })}
-
-          {/* Bouton dealer. */}
-          {dealer && (
-            <motion.div
-              className="absolute z-20 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[11px] font-black text-ink shadow-md ring-2 ring-black/30"
-              initial={false}
-              animate={{ left: dealer.buttonX, top: dealer.buttonY }}
-              transition={{ type: 'spring', stiffness: 120, damping: 18 }}
-            >
-              D
-            </motion.div>
-          )}
-
-          {/* Sièges. */}
-          {view.seats.map((seat, index) => {
-            const { seatX, seatY, p } = layout[index]!;
-            const isMe = index === mySeat;
-            return (
-              <div
-                key={index}
-                className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
-                style={{ left: seatX, top: seatY }}
-              >
-                {seat ? (
-                  <Seat
-                    seat={seat}
-                    member={membersById.get(seat.publicId)}
-                    isMe={isMe}
-                    width={plateW}
-                    cardsBelow={p.y < -0.55}
-                    toCenter={{ x: cx - seatX, y: cy - seatY }}
-                    handNumber={seat.inHand && hand ? hand.handNumber : null}
-                    dealDelays={animation.dealDelays.get(index) ?? null}
-                    turn={
-                      hand && !hand.isComplete && hand.toAct === index && view.turnDeadline !== null
-                        ? {
-                            deadline: view.turnDeadline,
-                            totalMs: view.config.turnSeconds * 1000,
-                            clockOffset,
-                          }
-                        : null
-                    }
-                    handName={showdown.get(index)?.name ?? null}
-                    winnings={winnings.get(index) ?? 0}
-                    bestCards={winnings.has(index) ? (showdown.get(index)?.cards ?? []) : []}
-                  />
-                ) : (
-                  <EmptySeat width={plateW} canSit={mySeat === null} onSit={() => onSit(index)} />
-                )}
-              </div>
-            );
-          })}
-        </>
-      )}
-    </div>
+        );
+      })}
+    </>
   );
 }

@@ -19,6 +19,10 @@ export interface RoomSummary {
   players: number;
   maxSeats: number;
   status: RoomStatus;
+  blinds: { small: number; big: number };
+  startingStack: number;
+  /** Les 3 premiers joueurs assis, pour les avatars de la liste. */
+  preview: { nickname: string; color: string }[];
 }
 
 export interface MemberView {

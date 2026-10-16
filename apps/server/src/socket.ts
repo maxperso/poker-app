@@ -5,13 +5,14 @@ import {
   gameActionSchema,
   type GameEvent,
   joinRoomSchema,
+  roomIdSchema,
   type ServerToClientEvents,
   sitOutSchema,
   takeSeatSchema,
   tokenSchema,
 } from '@poker/shared';
 import type { Server, Socket } from 'socket.io';
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { Room } from './rooms/Room';
 import type { RoomManager } from './rooms/RoomManager';
 import { buildView } from './views';
@@ -140,6 +141,13 @@ export function registerSocketHandlers(io: PokerServer, manager: RoomManager): v
     on('room:create', createRoomSchema, (config) => {
       const room = manager.create(config, token);
       return { ok: true, roomId: room.id } as Ack;
+    });
+
+    on('room:peek', z.object({ roomId: roomIdSchema }), ({ roomId }) => {
+      const room = manager.get(roomId);
+      return room
+        ? ({ ok: true, name: room.config.name } as Ack)
+        : { ok: false, error: 'ROOM_NOT_FOUND' };
     });
 
     on('room:join', joinRoomSchema, ({ roomId, nickname }) => {

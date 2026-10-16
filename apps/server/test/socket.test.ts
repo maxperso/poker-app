@@ -106,8 +106,23 @@ describe('lobby', () => {
     expect(rooms.map((r) => r.name)).toEqual(['Entre amis']);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(app.manager.publicSummaries()).toEqual([
-      { id: created.roomId, name: 'Entre amis', players: 1, maxSeats: 6, status: 'waiting' },
+      {
+        id: created.roomId,
+        name: 'Entre amis',
+        players: 1,
+        maxSeats: 6,
+        status: 'waiting',
+        blinds: { small: 10, big: 20 },
+        startingStack: 1000,
+        preview: [{ nickname: 'Alice', color: expect.any(String) }],
+      },
     ]);
+    expect(
+      await request<{ name: string }>(watcher, 'room:peek', { roomId: created.roomId }),
+    ).toEqual({
+      ok: true,
+      name: 'Entre amis',
+    });
   });
 });
 

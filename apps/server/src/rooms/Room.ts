@@ -266,12 +266,19 @@ export class Room {
   }
 
   summary(): RoomSummary {
+    const seated = this.table.seats.flatMap((seat) => {
+      const member = seat ? this.memberByPublicId(seat.id) : undefined;
+      return member ? [{ nickname: member.nickname, color: member.color }] : [];
+    });
     return {
       id: this.id,
       name: this.config.name,
-      players: this.table.seats.filter(Boolean).length,
+      players: seated.length,
       maxSeats: this.config.maxSeats,
       status: this.status,
+      blinds: { small: this.config.blinds.small, big: this.config.blinds.big },
+      startingStack: this.config.startingStack,
+      preview: seated.slice(0, 3),
     };
   }
 

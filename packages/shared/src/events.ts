@@ -29,6 +29,8 @@ export interface ClientToServerEvents {
   'lobby:subscribe': (reply: Reply<{ rooms: RoomSummary[] }>) => void;
   'lobby:unsubscribe': () => void;
   'room:create': (input: CreateRoomInput, reply: Reply<{ roomId: string }>) => void;
+  /** Nom d'un salon avant d'y entrer (bandeau « Tu es invité dans… »). */
+  'room:peek': (input: { roomId: string }, reply: Reply<{ name: string }>) => void;
   'room:join': (input: { roomId: string; nickname: string }, reply: Reply) => void;
   'room:leave': (reply: Reply) => void;
   'seat:take': (input: { seat: number }, reply: Reply) => void;

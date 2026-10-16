@@ -1,22 +1,37 @@
-import { nicknameSchema } from '@poker/shared';
-import { type FormEvent, useState } from 'react';
+import { avatarColor, nicknameSchema } from '@poker/shared';
+import { type FormEvent, useEffect, useState } from 'react';
 import { Avatar } from '../components/table/Avatar';
-import { Button } from '../components/ui/Button';
+import { Button, inputClass, Logo } from '../components/ui/Button';
 import { setNickname } from '../lib/identity';
-import { avatarColor } from '@poker/shared';
+import { request } from '../lib/socket';
 
 interface NicknameScreenProps {
   initial?: string;
-  /** Message affiché au-dessus du champ (ex. pseudo déjà pris). */
+  /** Arrivée par un lien : on affiche le nom du salon (« Tu es invité dans… »). */
+  roomId?: string | null;
+  /** Message d'alerte (ex. pseudo déjà pris). */
   notice?: string;
   onDone?: () => void;
 }
 
-/** Premier accès (ou pseudo pris) : choisir un pseudo, mémorisé dans le navigateur. */
-export function NicknameScreen({ initial = '', notice, onDone }: NicknameScreenProps) {
+/** Premier accès (DESIGN.md §4) : choisir un pseudo, gardé sur cet appareil. */
+export function NicknameScreen({
+  initial = '',
+  roomId = null,
+  notice,
+  onDone,
+}: NicknameScreenProps) {
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
+  const [roomName, setRoomName] = useState<string | null>(null);
   const preview = value.trim() || '?';
+
+  useEffect(() => {
+    if (!roomId) return;
+    void request('room:peek', { roomId }).then((res) => {
+      if (res.ok) setRoomName(res.name);
+    });
+  }, [roomId]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -33,38 +48,56 @@ export function NicknameScreen({ initial = '', notice, onDone }: NicknameScreenP
     <div className="flex min-h-full items-center justify-center p-4">
       <form
         onSubmit={submit}
-        className="flex w-full max-w-sm flex-col items-center gap-5 rounded-3xl border border-line bg-panel p-8 shadow-2xl"
+        className="flex w-full max-w-[440px] flex-col items-center gap-6 rounded-2xl border-[1.5px] border-gold/70 bg-surface p-9 shadow-[0_0_60px_rgba(212,166,74,0.12)]"
       >
-        <Avatar nickname={preview} color={avatarColor(preview)} size={72} />
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Choisissez un pseudo</h1>
-          <p className="mt-1 text-sm text-muted">
-            Pas de compte : votre navigateur s’en souviendra.
-          </p>
-        </div>
-        {notice && (
-          <p className="w-full rounded-xl bg-[#3b1d22] px-3 py-2 text-center text-sm text-[#fca5a5]">
+        <Logo size={22} />
+
+        {notice ? (
+          <p className="w-full rounded-[10px] bg-danger/15 px-4 py-3 text-center text-[15px] text-danger">
             {notice}
           </p>
+        ) : (
+          roomName && (
+            <p className="w-full rounded-[10px] bg-live-bg/70 px-4 py-3 text-center text-[17px] text-live-text">
+              Tu es invité dans le salon « {roomName} »
+            </p>
+          )
         )}
-        <div className="w-full">
+
+        <Avatar nickname={preview} color={avatarColor(preview)} size={96} ring />
+
+        <h1 className="font-display text-center text-[40px] font-bold leading-none">
+          Comment on t’appelle ?
+        </h1>
+
+        <div className="flex w-full flex-col gap-2">
+          <label htmlFor="nickname" className="text-[15px] font-semibold text-gold-light">
+            Pseudo
+          </label>
           <input
+            id="nickname"
             autoFocus
             value={value}
+            maxLength={16}
             onChange={(e) => {
               setValue(e.target.value);
               setError(null);
             }}
-            maxLength={16}
-            placeholder="Votre pseudo"
-            className="h-12 w-full rounded-xl border border-line bg-ink px-4 text-lg text-white outline-none focus:border-gold"
+            className={inputClass}
             aria-label="Pseudo"
           />
-          {error && <p className="mt-1.5 text-sm text-[#fca5a5]">{error}</p>}
+          <span className={`text-sm ${error ? 'text-danger' : 'text-text-3'}`}>
+            {error ?? '16 caractères maximum. Ton avatar est créé à partir de ton pseudo.'}
+          </span>
         </div>
-        <Button type="submit" variant="primary" size="lg" className="w-full">
-          C’est parti
+
+        <Button type="submit" variant="gold" display size="lg" className="w-full">
+          {roomId ? 'Rejoindre la table' : 'Entrer'}
         </Button>
+
+        <p className="text-center text-sm text-text-3">
+          Ton pseudo est gardé sur cet appareil, pas besoin de compte.
+        </p>
       </form>
     </div>
   );

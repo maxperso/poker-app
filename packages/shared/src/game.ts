@@ -10,14 +10,28 @@ export function blindsForLevel(base: Blinds, level: number): Blinds {
   return { small: Math.round(base.small * multiplier), big: Math.round(base.big * multiplier) };
 }
 
+/** Palette des avatars (charte « Club classique »). L'initiale est écrite en #14110c. */
+export const AVATAR_COLORS = [
+  '#e8b04f',
+  '#7fb3d5',
+  '#c39bd3',
+  '#76d7c4',
+  '#f1948a',
+  '#f7dc6f',
+  '#85c1e9',
+  '#bb8fce',
+] as const;
+
 /**
  * Couleur d'avatar dérivée du pseudo : le même pseudo a toujours la même couleur,
- * sans rien stocker. Teinte tirée d'un hash, saturation et luminosité fixes pour rester lisible.
+ * sans rien stocker (hash du pseudo → une couleur de la palette).
  */
 export function avatarColor(nickname: string): string {
   let hash = 0;
-  for (const char of nickname.toLowerCase()) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
-  return `hsl(${hash % 360} 65% 45%)`;
+  for (const char of nickname.trim().toLowerCase()) {
+    hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
+  }
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length] as string;
 }
 
 /** Comparaison de pseudos insensible à la casse et aux accents (« Élodie » = « elodie »). */

@@ -1,5 +1,6 @@
 import type { GameEvent, RoomStateMessage, RoomView } from '@poker/shared';
 import { useEffect, useRef, useState } from 'react';
+import { describeEvents } from '../lib/actionLog';
 import { type ClientError, request, socket } from '../lib/socket';
 
 export type RoomConnection =
@@ -12,6 +13,8 @@ export type RoomConnection =
       events: GameEvent[];
       /** serveur − client, en ms : `Date.now() + clockOffset` ≈ heure du serveur. */
       clockOffset: number;
+      /** Historique lisible des dernières actions (le plus récent en dernier). */
+      log: string[];
       connected: boolean;
     };
 
@@ -50,13 +53,15 @@ export function useRoom(roomId: string, nickname: string): RoomConnection {
       // Un message plus ancien que le dernier reçu (réseau capricieux) est ignoré.
       if (message.seq <= lastSeq.current) return;
       lastSeq.current = message.seq;
-      setState({
+      const lines = describeEvents(message.events, message.view);
+      setState((current) => ({
         status: 'ready',
         view: message.view,
         events: message.events,
         clockOffset: message.serverNow - Date.now(),
         connected: true,
-      });
+        log: [...(current.status === 'ready' ? current.log : []), ...lines].slice(-30),
+      }));
     };
 
     const onDisconnect = () =>

@@ -1,38 +1,34 @@
 import type { MemberView, SeatView } from '@poker/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { formatChips } from '../../lib/format';
+import type { StageLayout } from '../../lib/tableLayout';
 import { Avatar } from './Avatar';
 import { PlayingCard } from './PlayingCard';
-import { TurnTimer } from './TurnTimer';
+import { TimerRing } from './TimerRing';
 
 export interface SeatProps {
   seat: SeatView;
   member: MemberView | undefined;
-  isMe: boolean;
-  /** Largeur de la plaque (px) : tout le reste en découle. */
-  width: number;
-  /** Les cartes s'affichent au-dessus de la plaque (en haut de l'écran : en dessous). */
-  cardsBelow: boolean;
-  /** Vecteur du siège vers le centre de la table (pour la distribution). */
+  layout: StageLayout['seat'];
+  /** Vecteur de la boîte du siège vers le centre de la table (distribution). */
   toCenter: { x: number; y: number };
   handNumber: number | null;
-  /** Retards de distribution des deux cartes (s), ou null si pas d'animation. */
   dealDelays: [number, number] | null;
   turn: { deadline: number; totalMs: number; clockOffset: number } | null;
-  /** Nom de la main à l'abattage. */
+  /** Abattage : nom de la main et gain. */
   handName: string | null;
-  /** Gain de la main qui vient de se terminer. */
   winnings: number;
-  /** Cartes de la meilleure main (à surligner à l'abattage). */
   bestCards: string[];
 }
 
+/**
+ * Siège d'un adversaire (DESIGN.md §2) : avatar en haut, deux petits dos de carte
+ * s'il est encore dans le coup, cartouche pseudo + stack en dessous.
+ */
 export function Seat({
   seat,
   member,
-  isMe,
-  width,
-  cardsBelow,
+  layout,
   toCenter,
   handNumber,
   dealDelays,
@@ -41,100 +37,113 @@ export function Seat({
   winnings,
   bestCards,
 }: SeatProps) {
-  const avatarSize = Math.round(width * 0.36);
   const nickname = member?.nickname ?? '…';
-  const inactive = seat.folded || seat.sittingOut;
-  const cardWidth = Math.round(width * (seat.cards && seat.cards !== 'hidden' ? 0.36 : 0.27));
-  const showCards = !isMe && seat.cards !== null;
-  const status = seat.allIn
-    ? { text: 'Tapis', className: 'bg-danger text-white' }
-    : seat.sittingOut
-      ? { text: 'Absent', className: 'bg-white/15 text-muted' }
-      : seat.folded
-        ? { text: 'Couché', className: 'bg-white/10 text-muted' }
-        : null;
+  const away = seat.sittingOut || (member !== undefined && !member.connected);
+  const revealed = Array.isArray(seat.cards) ? seat.cards : null;
+  const opacity = seat.folded ? 0.4 : away ? 0.6 : 1;
+  const highlight = turn !== null || winnings > 0;
 
   return (
-    <div className="relative flex flex-col items-center" style={{ width }}>
-      {/* Cartes de l'adversaire : petites, face cachée, sauf à l'abattage. */}
-      {showCards && handNumber !== null && (
-        <div
-          className="absolute left-1/2 z-0 flex -translate-x-1/2"
-          style={{
-            [cardsBelow ? 'top' : 'bottom']: `calc(100% - ${Math.round(width * 0.08)}px)`,
-            gap: Math.round(cardWidth * -0.25),
-          }}
+    <motion.div
+      className="relative"
+      style={{ width: layout.width, height: layout.height }}
+      animate={{ opacity }}
+      transition={{ duration: 0.3 }}
+    >
+      {/* Avatar (avec anneau de timer à son tour). */}
+      <div
+        className="absolute left-1/2 top-0 z-20 -translate-x-1/2"
+        style={{ marginTop: turn ? -4 : 0 }}
+      >
+        <TimerRing
+          size={layout.avatar}
+          deadline={turn?.deadline ?? null}
+          totalMs={turn?.totalMs ?? 1}
+          clockOffset={turn?.clockOffset ?? 0}
         >
-          {[0, 1].map((i) => {
-            const card = seat.cards === 'hidden' || seat.cards === null ? null : seat.cards[i]!;
-            return (
+          <Avatar nickname={nickname} color={member?.color ?? '#8f8a7c'} size={layout.avatar} />
+        </TimerRing>
+      </div>
+
+      {/* Deux petits dos de carte, en haut à droite de l'avatar. */}
+      {seat.cards === 'hidden' && handNumber !== null && (
+        <div
+          className="absolute z-0"
+          style={{ left: layout.width / 2 + layout.avatar * 0.18, top: -layout.avatar * 0.12 }}
+        >
+          {[0, 1].map((i) => (
+            <div
+              key={`${handNumber}-${i}`}
+              className="absolute"
+              style={{ left: i * layout.cardW * 0.42, top: i * 2 }}
+            >
               <PlayingCard
-                key={`${handNumber}-${i}`}
-                card={card}
-                width={cardWidth}
-                rotate={i === 0 ? -6 : 6}
-                dimmed={seat.folded}
-                highlighted={card !== null && bestCards.includes(card)}
+                card={null}
+                width={layout.cardW}
+                height={layout.cardH}
+                rotate={8 + i * 6}
                 dealFrom={dealDelays ? toCenter : undefined}
                 delay={dealDelays?.[i] ?? 0}
               />
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Plaque : avatar + pseudo + tapis. */}
-      <motion.div
-        className={`relative z-10 flex w-full items-center gap-2 rounded-full border py-1 pl-1 pr-3 shadow-lg backdrop-blur ${
-          turn
-            ? 'border-turn bg-panel-2/95 shadow-[0_0_18px_rgba(251,191,36,0.45)]'
-            : winnings > 0
-              ? 'border-gold bg-panel-2/95 shadow-[0_0_18px_rgba(242,193,78,0.5)]'
-              : 'border-line bg-panel/90'
-        }`}
-        animate={{ opacity: inactive ? 0.55 : 1 }}
-      >
-        <div className="relative" style={{ width: avatarSize, height: avatarSize }}>
-          <Avatar nickname={nickname} color={member?.color ?? '#475569'} size={avatarSize} />
-          {turn && (
-            <TurnTimer
-              key={turn.deadline}
-              size={avatarSize + 8}
-              deadline={turn.deadline}
-              totalMs={turn.totalMs}
-              clockOffset={turn.clockOffset}
+      {/* Cartes révélées (abattage) : par-dessus l'avatar, face visible. */}
+      {revealed && handNumber !== null && (
+        <div
+          className="absolute left-1/2 z-20 flex -translate-x-1/2"
+          style={{ top: -layout.cardH * 0.55, gap: 4 }}
+        >
+          {revealed.map((card, i) => (
+            <PlayingCard
+              key={`${handNumber}-${i}`}
+              card={card}
+              width={Math.round(layout.cardW * 1.45)}
+              height={Math.round(layout.cardH * 1.45)}
+              rotate={i === 0 ? -5 : 5}
+              dimmed={seat.folded}
+              highlighted={bestCards.includes(card)}
             />
-          )}
-          {member && !member.connected && (
-            <span
-              title="Déconnecté"
-              className="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-panel bg-muted"
-            />
-          )}
+          ))}
         </div>
-        <div className="min-w-0 flex-1 leading-tight">
-          <div
-            className={`truncate font-semibold ${isMe ? 'text-gold' : 'text-white'}`}
-            style={{ fontSize: Math.max(11, width * 0.105) }}
-            title={nickname}
-          >
-            {nickname}
-          </div>
-          <div className="tabular text-white/80" style={{ fontSize: Math.max(11, width * 0.1) }}>
-            {status ? (
-              <span
-                className={`rounded px-1 py-px text-[0.85em] font-semibold uppercase ${status.className}`}
-              >
-                {status.text}
-              </span>
-            ) : (
-              formatChips(seat.stack)
-            )}
-          </div>
-        </div>
-      </motion.div>
+      )}
 
-      {/* Nom de la main à l'abattage, gain. */}
+      {/* Cartouche pseudo + stack. */}
+      <div
+        className={`absolute inset-x-0 z-10 flex flex-col items-center justify-center rounded-[10px] border bg-surface text-center leading-none transition-shadow ${
+          highlight ? 'border-gold shadow-[0_0_18px_rgba(212,166,74,0.35)]' : 'border-gold-soft'
+        }`}
+        style={{ top: layout.plateTop, height: layout.plateHeight, gap: 3 }}
+      >
+        <span
+          className="max-w-full truncate px-2 font-semibold text-text"
+          style={{ fontSize: layout.name }}
+        >
+          {nickname}
+        </span>
+        {seat.allIn ? (
+          <span
+            className="font-display rounded-full bg-gold px-2 font-bold uppercase tracking-[0.05em] text-on-gold"
+            style={{ fontSize: layout.stack * 0.8, lineHeight: 1.25 }}
+          >
+            Tapis
+          </span>
+        ) : (
+          <span
+            className="font-display tabular font-bold text-gold-amount"
+            style={{ fontSize: layout.stack }}
+          >
+            {formatChips(seat.stack)}
+            {away && (
+              <span className="ml-1.5 font-sans text-[0.7em] font-medium text-text-3">Absent</span>
+            )}
+          </span>
+        )}
+      </div>
+
+      {/* Abattage : nom de la main, gain. */}
       <AnimatePresence>
         {(handName || winnings > 0) && (
           <motion.div
@@ -143,56 +152,66 @@ export function Seat({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ delay: 0.4 }}
-            className="absolute z-20 flex flex-col items-center gap-0.5 whitespace-nowrap"
-            style={{ [cardsBelow ? 'bottom' : 'top']: 'calc(100% + 4px)' }}
+            className="absolute left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap"
+            style={{ top: layout.plateTop + layout.plateHeight + 4 }}
           >
             {handName && (
-              <span className="rounded-md bg-black/75 px-2 py-0.5 text-xs font-medium text-white">
+              <span className="rounded-full bg-black/75 px-2 py-0.5 text-xs font-medium text-text">
                 {handName}
               </span>
             )}
             {winnings > 0 && (
-              <span className="tabular rounded-md bg-gold px-2 py-0.5 text-xs font-bold text-ink">
+              <span className="font-display tabular rounded-full bg-gold px-2 py-0.5 text-sm font-bold text-on-gold">
                 +{formatChips(winnings)}
               </span>
             )}
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }
 
 interface EmptySeatProps {
-  width: number;
+  layout: StageLayout['seat'];
   canSit: boolean;
   onSit: () => void;
 }
 
-export function EmptySeat({ width, canSit, onSit }: EmptySeatProps) {
-  const size = Math.round(width * 0.36);
-  if (!canSit) {
-    return (
-      <div
-        className="rounded-full border border-dashed border-white/15"
-        style={{ width: size, height: size }}
-        aria-label="Place libre"
-      />
-    );
-  }
-  return (
+/** Siège vide : cercle pointillé « Libre » ; cliquable pour un spectateur. */
+export function EmptySeat({ layout, canSit, onSit }: EmptySeatProps) {
+  const content = (
+    <>
+      <span
+        className={`flex items-center justify-center rounded-full border-2 border-dashed font-display text-2xl ${
+          canSit
+            ? 'border-gold/60 text-gold group-hover:border-gold'
+            : 'border-white/20 text-white/25'
+        }`}
+        style={{ width: layout.avatar, height: layout.avatar }}
+      >
+        {canSit ? '+' : ''}
+      </span>
+      <span
+        className={`text-sm font-semibold ${canSit ? 'text-gold-light group-hover:text-gold' : 'text-text-3'}`}
+      >
+        {canSit ? 'S’asseoir' : 'Libre'}
+      </span>
+    </>
+  );
+  const style = { width: layout.width, height: layout.height };
+  return canSit ? (
     <button
       type="button"
       onClick={onSit}
-      className="group flex items-center gap-2 rounded-full border border-dashed border-white/30 bg-black/30 py-1 pl-1 pr-3 text-sm text-white/80 transition hover:border-gold hover:text-gold"
+      className="group flex flex-col items-center gap-1"
+      style={style}
     >
-      <span
-        className="flex items-center justify-center rounded-full border border-dashed border-current text-lg"
-        style={{ width: size, height: size }}
-      >
-        +
-      </span>
-      S’asseoir
+      {content}
     </button>
+  ) : (
+    <div className="flex flex-col items-center gap-1 opacity-80" style={style}>
+      {content}
+    </div>
   );
 }
