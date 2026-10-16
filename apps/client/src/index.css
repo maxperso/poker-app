@@ -1,0 +1,75 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-ink: #0a0e13;
+  --color-panel: #121820;
+  --color-panel-2: #1a222c;
+  --color-line: #263140;
+  --color-muted: #8b98a8;
+  --color-felt-light: #2a8a55;
+  --color-felt: #1b6b3f;
+  --color-felt-dark: #0e4127;
+  --color-rail: #2a1a10;
+  --color-rail-light: #4a2f1c;
+  --color-gold: #f2c14e;
+  --color-turn: #fbbf24;
+  --color-danger: #ef4444;
+  --color-success: #34d399;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-ink);
+  color: #e7edf4;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* Les montants s'alignent proprement : chiffres à chasse fixe. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Retournement des cartes en 3D. */
+.card-3d {
+  transform-style: preserve-3d;
+}
+.card-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Curseur du slider de relance. */
+input[type='range'].raise-slider {
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-line);
+}
+input[type='range'].raise-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: var(--color-gold);
+  border: 3px solid #0a0e13;
+  cursor: pointer;
+}
+input[type='range'].raise-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: var(--color-gold);
+  border: 3px solid #0a0e13;
+  cursor: pointer;
+}

@@ -37,6 +37,14 @@ describe('membres', () => {
     expect(room.hostToken).toBe(token('b'));
   });
 
+  test("l'hôte seul qui part puis revient reste l'hôte", () => {
+    const { room } = makeRoom();
+    expectOk(room.join(HOST, 'Hôte'));
+    expectOk(room.leave(HOST));
+    expectOk(room.join(HOST, 'Hôte'));
+    expect(room.hostToken).toBe(HOST);
+  });
+
   test('salon vide : emptySince est renseigné', () => {
     const { room } = makeRoom();
     expectOk(room.join(token('a'), 'Alice'));
@@ -151,6 +159,18 @@ describe('départs et éliminations', () => {
       expectOk(room.act(tokenToAct(room), room.table.hand!.handNumber, { type: 'fold' }));
     expect(room.seatOf(leaver)).toBeNull();
     expect(room.members.has(leaver)).toBe(true); // toujours là, en spectateur
+  });
+
+  test('revenir dans le salon annule un départ demandé pendant la main', () => {
+    const { room } = makeRoom();
+    const [, bob] = seatPlayers(room, ['host', 'bob', 'carol']);
+    expectOk(room.start(HOST));
+    expectOk(room.leave(bob as string));
+    expectOk(room.join(bob as string, 'bob'));
+    while (!room.table.hand?.isComplete) {
+      expectOk(room.act(tokenToAct(room), room.table.hand!.handNumber, { type: 'fold' }));
+    }
+    expect(room.seatOf(bob as string)).toBe(1);
   });
 
   test('quitter le salon pendant une main : retiré à la fin de la main', () => {

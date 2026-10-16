@@ -108,6 +108,8 @@ export class Room {
       if (existing) {
         existing.nickname = nickname;
         existing.color = avatarColor(nickname);
+        // Revenir annule un départ demandé pendant la main (ex. rechargement de la page).
+        existing.leaving = null;
       } else {
         this.members.set(token, {
           token,
@@ -411,9 +413,10 @@ export class Room {
   private removeMember(member: Member): void {
     this.members.delete(member.token);
     if (this.hostToken === member.token) {
-      // L'hôte part : le membre le plus ancien prend le relais.
+      // L'hôte part : le membre le plus ancien prend le relais. Salon vide : l'hôte reste
+      // l'hôte, pour retrouver son rôle s'il revient (ex. retour arrière puis lien).
       const next = [...this.members.values()].sort((a, b) => a.joinedAt - b.joinedAt)[0];
-      this.hostToken = next?.token ?? null;
+      if (next) this.hostToken = next.token;
     }
     if (this.members.size === 0) this.emptySince = this.deps.now();
   }
