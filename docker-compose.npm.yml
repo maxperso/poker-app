@@ -1,0 +1,16 @@
+# Option : NPM tourne dans Docker sur la MÊME machine.
+# Le conteneur rejoint le réseau de NPM et n'ouvre plus de port ; dans NPM, on vise
+# http://poker:3000. Lancer avec :
+#
+#   echo "NPM_NETWORK=nom_du_reseau_npm" > .env     # nom trouvé avec `docker network ls`
+#   docker compose -f docker-compose.yml -f docker-compose.npm.yml up -d
+services:
+  poker:
+    ports: !reset []
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: ${NPM_NETWORK:?Indique le réseau de NPM dans .env (NPM_NETWORK=...)}

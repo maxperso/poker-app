@@ -47,35 +47,35 @@ npm run check    # typecheck + lint + format + tests
 
 L'image contient le serveur et le client buildé : un seul processus, un seul port (3000).
 
-1. Trouver le réseau Docker de Nginx Proxy Manager :
+1. Sur le serveur :
 
    ```sh
-   docker network ls        # ex. « npm_default » ou « nginx-proxy-manager_default »
-   ```
-
-2. Sur le serveur, dans le dossier du projet, créer un fichier `.env` :
-
-   ```sh
-   NPM_NETWORK=npm_default
-   ```
-
-3. Construire et lancer :
-
-   ```sh
+   git clone https://github.com/maxperso/poker-app.git && cd poker-app
    docker compose up -d --build
+   docker ps                      # « poker » doit être « Up … (healthy) »
    ```
 
-4. Dans Nginx Proxy Manager, ajouter un **Proxy Host** :
+   Le jeu répond sur `http://IP-du-serveur:3000` (autre port : `POKER_PORT=8080` dans `.env`).
+
+2. Dans Nginx Proxy Manager, ajouter un **Proxy Host** :
    - Domain : `poker.maxperso.fr`
-   - Scheme `http`, Forward Hostname `poker`, Forward Port `3000`
+   - Scheme `http`, Forward Hostname `IP-du-serveur` (ex. `192.168.1.53`), Forward Port `3000`
    - **Websockets Support : activé** (indispensable pour Socket.io)
    - **Block Common Exploits : activé**
    - Onglet SSL : certificat Let's Encrypt, « Force SSL », « HTTP/2 », « HSTS Enabled »
 
 Vérifier : `https://poker.maxperso.fr/healthz` doit répondre `{"ok":true,...}`.
 
-Si NPM tourne sur une autre machine, décommenter `ports` dans `docker-compose.yml`
-et faire pointer NPM vers `IP-du-serveur:3000`.
+**Variante** — NPM tourne dans Docker sur la même machine : le conteneur peut rejoindre son
+réseau et ne plus ouvrir de port (voir `docker-compose.npm.yml`) :
+
+```sh
+docker network ls                                   # repérer le réseau de NPM
+echo "NPM_NETWORK=nom_du_reseau" > .env
+docker compose -f docker-compose.yml -f docker-compose.npm.yml up -d --build
+```
+
+Dans NPM, viser alors `poker:3000`.
 
 Mise à jour : `git pull && docker compose up -d --build` (les parties en cours sont perdues,
 le classement est conservé dans le volume `poker-data`).
