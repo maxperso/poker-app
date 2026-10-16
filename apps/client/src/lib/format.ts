@@ -18,6 +18,8 @@ const ERRORS: Record<ClientError, string> = {
   ALREADY_STARTED: 'La partie a déjà commencé.',
   STALE_HAND: 'Cette main est terminée.',
   CANNOT_REBUY: 'Recave impossible pour le moment.',
+  RATE_LIMITED: 'Doucement ! Trop d’actions d’un coup, réessaie dans un instant.',
+  LIMIT_REACHED: 'Limite atteinte (trop de salons ou de joueurs). Réessaie plus tard.',
   INVALID_SEAT: 'Place invalide.',
   SEAT_TAKEN: 'Cette place vient d’être prise.',
   ALREADY_SEATED: 'Tu es déjà assis.',

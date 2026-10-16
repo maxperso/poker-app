@@ -25,6 +25,20 @@ export interface RoomSummary {
   preview: { nickname: string; color: string }[];
 }
 
+/** Une ligne du classement de l'accueil. */
+export interface LeaderboardEntry {
+  /** Identifiant public stable (empreinte du jeton, jamais le jeton lui-même). */
+  id: string;
+  nickname: string;
+  color: string;
+  handsPlayed: number;
+  handsWon: number;
+  /** Gains nets cumulés (négatif si le joueur a perdu plus qu'il n'a gagné). */
+  net: number;
+  biggestPot: number;
+  lastPlayedAt: number;
+}
+
 export interface MemberView {
   /** Identifiant public : le seul qui circule vers les autres joueurs (jamais le jeton secret). */
   publicId: string;

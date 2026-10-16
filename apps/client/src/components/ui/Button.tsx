@@ -131,7 +131,7 @@ export function Logo({ size = 22 }: { size?: number }) {
     <div className="flex items-center gap-2.5">
       <span className="chip inline-block" style={{ width: size * 1.25, height: size * 1.25 }} />
       <span
-        className="font-display font-bold uppercase tracking-[0.06em] text-gold"
+        className="font-display whitespace-nowrap font-bold uppercase tracking-[0.06em] text-gold"
         style={{ fontSize: size * 1.15 }}
       >
         Poker Interco

@@ -93,7 +93,7 @@ describe('lobby', () => {
     const alice = client('alice');
     const watcher = client('watcher');
     const initial = await request<{ rooms: RoomSummary[] }>(watcher, 'lobby:subscribe');
-    expect(initial).toEqual({ ok: true, rooms: [] });
+    expect(initial).toEqual({ ok: true, rooms: [], leaderboard: [], you: expect.any(String) });
 
     const update = new Promise<RoomSummary[]>((resolve) => watcher.once('lobby:rooms', resolve));
     await request(alice, 'room:create', { ...ROOM, visibility: 'private', name: 'Secret' });

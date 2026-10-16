@@ -1,6 +1,6 @@
 import type { PlayerAction, TableError } from '@poker/engine';
 import type { CreateRoomInput } from './schemas';
-import type { RoomStateMessage, RoomSummary } from './views';
+import type { LeaderboardEntry, RoomStateMessage, RoomSummary } from './views';
 
 export type ErrorCode =
   | TableError
@@ -12,6 +12,10 @@ export type ErrorCode =
   | 'ALREADY_STARTED'
   | 'STALE_HAND'
   | 'CANNOT_REBUY'
+  /** Trop de messages en peu de temps. */
+  | 'RATE_LIMITED'
+  /** Plafond atteint (salons, membres d'un salon…). */
+  | 'LIMIT_REACHED'
   | 'INTERNAL_ERROR';
 
 /** Réponse (ack) d'une requête : `{ ok: true, ...données }` ou `{ ok: false, error }`. */
@@ -26,7 +30,9 @@ type Reply<T extends object = object> = (response: Ack<T>) => void;
  * Renommer un champ ici casse la compilation des deux côtés.
  */
 export interface ClientToServerEvents {
-  'lobby:subscribe': (reply: Reply<{ rooms: RoomSummary[] }>) => void;
+  'lobby:subscribe': (
+    reply: Reply<{ rooms: RoomSummary[]; leaderboard: LeaderboardEntry[]; you: string }>,
+  ) => void;
   'lobby:unsubscribe': () => void;
   'room:create': (input: CreateRoomInput, reply: Reply<{ roomId: string }>) => void;
   /** Nom d'un salon avant d'y entrer (bandeau « Tu es invité dans… »). */
@@ -43,6 +49,7 @@ export interface ClientToServerEvents {
 
 export interface ServerToClientEvents {
   'lobby:rooms': (rooms: RoomSummary[]) => void;
+  'lobby:leaderboard': (leaderboard: LeaderboardEntry[]) => void;
   'room:state': (message: RoomStateMessage) => void;
   'room:closed': (payload: { reason: 'expired' }) => void;
 }

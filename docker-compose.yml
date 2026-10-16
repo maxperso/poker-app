@@ -8,11 +8,36 @@ services:
     image: poker-interco:latest
     container_name: poker
     restart: unless-stopped
+    environment:
+      # On est derrière NPM : la vraie IP des joueurs est dans X-Real-IP (limites par IP).
+      TRUST_PROXY: '1'
+    volumes:
+      # Classement des joueurs : survit aux mises à jour et aux redémarrages.
+      - poker-data:/app/data
     networks:
       - proxy
+    # Durcissement : même si une faille permettait d'exécuter du code dans le conteneur,
+    # il ne pourrait ni modifier l'image, ni gagner de privilèges, ni épuiser la machine.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
     # Si NPM tourne sur une autre machine (ou hors Docker), publier le port à la place :
     # ports:
     #   - "3000:3000"
+
+volumes:
+  poker-data:
 
 networks:
   proxy:

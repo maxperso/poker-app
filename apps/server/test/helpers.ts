@@ -1,5 +1,6 @@
 import { createRoomSchema, type CreateRoomInput, type GameEvent } from '@poker/shared';
 import { Room } from '../src/rooms/Room';
+import type { HandStat } from '../src/stats/StatsStore';
 import { seededRandomInt } from '../../../packages/engine/test/helpers';
 
 export { seededRandomInt };
@@ -9,7 +10,11 @@ export const token = (name: string) => `token-${name}`.padEnd(20, '0');
 export const HOST = token('host');
 
 /** Un salon de test. Les horloges sont celles de vitest (vi.useFakeTimers). */
-export function makeRoom(overrides: Partial<CreateRoomInput> = {}, seed = 1) {
+export function makeRoom(
+  overrides: Partial<CreateRoomInput> = {},
+  seed = 1,
+  onHandComplete?: (stats: HandStat[]) => void,
+) {
   const changes: GameEvent[][] = [];
   let nextId = 0;
   const room = new Room(
@@ -21,6 +26,7 @@ export function makeRoom(overrides: Partial<CreateRoomInput> = {}, seed = 1) {
       now: () => Date.now(),
       createId: () => `id${++nextId}`,
       onChange: (_room, events) => changes.push(events),
+      ...(onHandComplete ? { onHandComplete } : {}),
     },
   );
   return { room, changes, events: () => changes.flat() };

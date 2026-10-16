@@ -31,8 +31,11 @@ RUN npm ci --omit=dev --workspace=@poker/server --include-workspace-root=false
 FROM node:24-alpine
 ENV NODE_ENV=production \
     PORT=3000 \
-    CLIENT_DIR=/app/public
+    CLIENT_DIR=/app/public \
+    DATA_DIR=/app/data
 WORKDIR /app
+# Seul dossier où le serveur écrit : le classement (monté en volume par docker-compose).
+RUN mkdir -p /app/data && chown node:node /app/data
 # On garde l'arborescence du monorepo : certaines dépendances du serveur sont installées
 # dans apps/server/node_modules (version différente de celle d'un outil de build).
 COPY --from=deps /app/node_modules ./node_modules

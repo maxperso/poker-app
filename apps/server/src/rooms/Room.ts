@@ -27,6 +27,8 @@ import {
   type RoomSummary,
   sameNickname,
 } from '@poker/shared';
+import { LIMITS } from '../security';
+import type { HandStat } from '../stats/StatsStore';
 
 export interface Member {
   /** Jeton secret du navigateur : identifie le joueur, ne doit jamais être envoyé aux autres. */
@@ -49,6 +51,8 @@ export interface RoomDeps {
   createId: (size: number) => string;
   /** Appelé après chaque changement d'état, avec les événements produits depuis le précédent. */
   onChange: (room: Room, events: GameEvent[]) => void;
+  /** Fin de main : résultat de chaque participant (pour le classement). */
+  onHandComplete?: (stats: HandStat[]) => void;
 }
 
 /** Pauses entre deux mains, le temps de voir ce qui s'est passé. */
@@ -81,6 +85,8 @@ export class Room {
   private turnTimer: ReturnType<typeof setTimeout> | null = null;
   private nextHandTimer: ReturnType<typeof setTimeout> | null = null;
   private pending: GameEvent[] = [];
+  /** Tapis de chacun (par identifiant public) au début de la main en cours. */
+  private handStartStacks = new Map<string, number>();
 
   constructor(
     readonly id: string,
@@ -105,6 +111,7 @@ export class Room {
       if (taken) return fail('NICKNAME_TAKEN');
 
       const existing = this.members.get(token);
+      if (!existing && this.members.size >= LIMITS.membersPerRoom) return fail('LIMIT_REACHED');
       if (existing) {
         existing.nickname = nickname;
         existing.color = avatarColor(nickname);
@@ -294,6 +301,9 @@ export class Room {
   private startHand(): void {
     if (isHandInProgress(this.table) || dealableSeats(this.table).length < 2) return;
     const blinds = this.updateBlindLevel();
+    this.handStartStacks = new Map(
+      this.table.seats.flatMap((s) => (s ? [[s.id, s.stack] as const] : [])),
+    );
     const result = this.applyTable(startNextHand(this.table, blinds, this.deps.randomInt));
     if (result.ok) this.afterTableChange();
   }
@@ -316,7 +326,10 @@ export class Room {
     const handNumber = hand.handNumber;
     const delay = this.config.turnSeconds * 1000;
     this.turnDeadline = this.deps.now() + delay;
-    this.turnTimer = setTimeout(() => this.onTurnTimeout(handNumber, seat), delay);
+    this.turnTimer = setTimeout(
+      () => this.guard(() => this.onTurnTimeout(handNumber, seat)),
+      delay,
+    );
   }
 
   private onTurnTimeout(handNumber: number, seat: number): void {
@@ -351,6 +364,7 @@ export class Room {
 
   private onHandComplete(): void {
     this.turnDeadline = null;
+    this.reportHandStats();
     for (const member of [...this.members.values()]) {
       const seat = this.seatOf(member.token);
       if (seat === null) continue;
@@ -370,13 +384,55 @@ export class Room {
   private scheduleNextHand(delay: number): void {
     if (this.status !== 'playing' || this.nextHandTimer) return;
     this.nextHandAt = this.deps.now() + delay;
-    this.nextHandTimer = setTimeout(() => {
-      this.nextHandTimer = null;
-      this.nextHandAt = null;
-      // Pas assez de joueurs : la partie est en pause, maybeResume la relancera.
-      this.startHand();
-      this.commit();
-    }, delay);
+    this.nextHandTimer = setTimeout(
+      () =>
+        this.guard(() => {
+          this.nextHandTimer = null;
+          this.nextHandAt = null;
+          // Pas assez de joueurs : la partie est en pause, maybeResume la relancera.
+          this.startHand();
+          this.commit();
+        }),
+      delay,
+    );
+  }
+
+  /** Résultat de la main pour le classement : gain ou perte de chacun, pots remportés. */
+  private reportHandStats(): void {
+    const hand = this.table.hand;
+    if (!hand?.result || !this.deps.onHandComplete) return;
+    const potWon = new Map<number, number>();
+    for (const award of hand.result.awards) {
+      for (const w of award.winners) potWon.set(w.seat, (potWon.get(w.seat) ?? 0) + w.amount);
+    }
+    const stats: HandStat[] = hand.players.flatMap((player) => {
+      const member = this.memberByPublicId(player.id);
+      const start = this.handStartStacks.get(player.id);
+      if (!member || start === undefined) return [];
+      return [
+        {
+          token: member.token,
+          nickname: member.nickname,
+          color: member.color,
+          net: player.stack - start,
+          won: potWon.has(player.seat),
+          potWon: potWon.get(player.seat) ?? 0,
+        },
+      ];
+    });
+    this.deps.onHandComplete(stats);
+  }
+
+  /**
+   * Exécute un rappel de minuterie sans risquer de faire tomber le serveur :
+   * une exception ici (bug) ne doit pas couper les parties de tous les salons.
+   */
+  private guard(callback: () => void): void {
+    try {
+      callback();
+    } catch (error) {
+      console.error(`[room ${this.id}] erreur dans une minuterie :`, error);
+    }
   }
 
   /** Partie en pause faute de joueurs : on relance dès qu'il y en a assez. */

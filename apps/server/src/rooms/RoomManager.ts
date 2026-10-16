@@ -1,5 +1,7 @@
 import type { RandomInt } from '@poker/engine';
 import type { GameEvent, RoomConfig, RoomSummary } from '@poker/shared';
+import { LIMITS } from '../security';
+import type { HandStat } from '../stats/StatsStore';
 import { Room } from './Room';
 
 export interface RoomManagerDeps {
@@ -8,6 +10,7 @@ export interface RoomManagerDeps {
   createId: (size: number) => string;
   onRoomChange: (room: Room, events: GameEvent[]) => void;
   onRoomClosed: (room: Room) => void;
+  onHandComplete?: (stats: HandStat[]) => void;
 }
 
 /** Durées de conservation (ms). */
@@ -25,10 +28,15 @@ export const TTL = {
  */
 export class RoomManager {
   private readonly rooms = new Map<string, Room>();
+  /** IP qui a créé chaque salon (pour plafonner le nombre de salons par IP). */
+  private readonly creators = new Map<string, string>();
 
   constructor(private readonly deps: RoomManagerDeps) {}
 
-  create(config: RoomConfig, creatorToken: string): Room {
+  /** Crée un salon, ou refuse si un plafond est atteint (protection contre l'inondation). */
+  create(config: RoomConfig, creatorToken: string, creatorIp = 'local'): Room | 'LIMIT_REACHED' {
+    const byThisIp = [...this.creators.values()].filter((ip) => ip === creatorIp).length;
+    if (this.rooms.size >= LIMITS.rooms || byThisIp >= LIMITS.roomsPerIp) return 'LIMIT_REACHED';
     let id = this.deps.createId(10);
     while (this.rooms.has(id)) id = this.deps.createId(10);
     const room = new Room(id, config, creatorToken, {
@@ -36,8 +44,10 @@ export class RoomManager {
       now: this.deps.now,
       createId: this.deps.createId,
       onChange: this.deps.onRoomChange,
+      ...(this.deps.onHandComplete ? { onHandComplete: this.deps.onHandComplete } : {}),
     });
     this.rooms.set(id, room);
+    this.creators.set(id, creatorIp);
     return room;
   }
 
@@ -73,6 +83,7 @@ export class RoomManager {
       if (room.emptySince !== null && now - room.emptySince > TTL.emptyRoom) {
         room.dispose();
         this.rooms.delete(room.id);
+        this.creators.delete(room.id);
         this.deps.onRoomClosed(room);
       }
     }

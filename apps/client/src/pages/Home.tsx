@@ -6,6 +6,7 @@ import {
 } from '@poker/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { type FormEvent, useState } from 'react';
+import { Leaderboard } from '../components/Leaderboard';
 import { Avatar } from '../components/table/Avatar';
 import { Button, Choice, Field, inputClass, Logo } from '../components/ui/Button';
 import { useLobby } from '../hooks/useLobby';
@@ -16,7 +17,8 @@ import { NicknameScreen } from './NicknameScreen';
 
 /** Accueil (DESIGN.md §3) : rejoindre par lien, salons publics, créer un salon. */
 export function Home({ nickname }: { nickname: string }) {
-  const rooms = useLobby();
+  const lobby = useLobby();
+  const rooms = lobby?.rooms ?? null;
   const [editingNickname, setEditingNickname] = useState(false);
 
   if (editingNickname) {
@@ -26,10 +28,17 @@ export function Home({ nickname }: { nickname: string }) {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col gap-10 px-5 py-8 sm:px-8 sm:py-10">
       <header className="flex items-center justify-between gap-4">
-        <Logo size={24} />
+        <span className="sm:hidden">
+          <Logo size={18} />
+        </span>
+        <span className="hidden sm:block">
+          <Logo size={24} />
+        </span>
         <div className="flex items-center gap-3 rounded-full border border-gold-soft bg-surface py-1.5 pl-1.5 pr-1.5">
           <Avatar nickname={nickname} color={avatarColor(nickname)} size={36} />
-          <span className="max-w-32 truncate text-[17px] font-semibold">{nickname}</span>
+          <span className="hidden max-w-32 truncate text-[17px] font-semibold sm:inline">
+            {nickname}
+          </span>
           <button
             type="button"
             onClick={() => setEditingNickname(true)}
@@ -90,6 +99,8 @@ export function Home({ nickname }: { nickname: string }) {
 
         <CreateRoomPanel nickname={nickname} />
       </div>
+
+      {lobby && <Leaderboard entries={lobby.leaderboard} you={lobby.you} />}
     </div>
   );
 }
@@ -119,7 +130,7 @@ function JoinByLink() {
       <label htmlFor="room-link" className="text-[17px] font-semibold text-gold-light">
         Tu as reçu un lien ?
       </label>
-      <div className="flex gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <input
           id="room-link"
           value={value}
@@ -163,7 +174,7 @@ function RoomRow({ room }: { room: RoomSummary }) {
       className="flex flex-wrap items-center gap-x-3 gap-y-3 rounded-2xl border border-gold-soft bg-surface px-5 py-4 sm:flex-nowrap"
     >
       <MiniTable />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-[calc(100%-5rem)] sm:basis-0">
         <div className="truncate text-xl font-semibold">{room.name}</div>
         <div className="tabular truncate text-[16px] text-text-2">
           Blinds {formatChips(room.blinds.small)} / {formatChips(room.blinds.big)} · Stack{' '}
@@ -225,7 +236,10 @@ const BLIND_OPTIONS = [
 const STACK_OPTIONS = [500, 1000, 2000, 5000, 10000];
 
 function CreateRoomPanel({ nickname }: { nickname: string }) {
-  const [name, setName] = useState(`Le salon de ${nickname}`);
+  // « Le salon d’Alice », « Le salon de Bob ».
+  const [name, setName] = useState(
+    `Le salon ${/^[aeiouyàâäéèêëîïôöûüh]/i.test(nickname) ? 'd’' : 'de '}${nickname}`,
+  );
   const [maxSeats, setMaxSeats] = useState(6);
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [blindsIndex, setBlindsIndex] = useState(1);

@@ -15,11 +15,14 @@ import type { Server, Socket } from 'socket.io';
 import { z } from 'zod';
 import type { Room } from './rooms/Room';
 import type { RoomManager } from './rooms/RoomManager';
+import { clientIp, Counter, LIMITS, TokenBucket } from './security';
+import { playerKey, type StatsStore } from './stats/StatsStore';
 import { buildView } from './views';
 
 export interface SocketData {
   token: string;
   roomId: string | null;
+  ip: string;
 }
 
 export type PokerServer = Server<
@@ -74,18 +77,50 @@ export function createLobbyNotifier(io: PokerServer, manager: RoomManager): () =
   };
 }
 
-export function registerSocketHandlers(io: PokerServer, manager: RoomManager): void {
-  // Authentification à la connexion : le jeton du navigateur identifie le joueur.
+/** Envoie le classement aux abonnés du lobby (au plus une fois par seconde). */
+export function createLeaderboardNotifier(io: PokerServer, stats: StatsStore): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return () => {
+    if (timer) return;
+    timer = setTimeout(() => {
+      timer = null;
+      io.to(LOBBY).emit('lobby:leaderboard', stats.leaderboard());
+    }, 1_000);
+    timer.unref();
+  };
+}
+
+export interface SocketOptions {
+  manager: RoomManager;
+  stats: StatsStore;
+  /** Derrière un reverse proxy de confiance : lire la vraie IP dans ses en-têtes. */
+  trustProxy: boolean;
+}
+
+export function registerSocketHandlers(
+  io: PokerServer,
+  { manager, stats, trustProxy }: SocketOptions,
+): void {
+  const connectionsPerIp = new Counter();
+
+  // À la connexion : jeton valide obligatoire, et pas plus de N connexions par IP.
   io.use((socket, next) => {
     const token = tokenSchema.safeParse((socket.handshake.auth as { token?: unknown }).token);
     if (!token.success) return next(new Error('INVALID_TOKEN'));
+    const ip = clientIp(socket.request, trustProxy);
+    if (connectionsPerIp.get(ip) >= LIMITS.connectionsPerIp)
+      return next(new Error('TOO_MANY_CONNECTIONS'));
+    connectionsPerIp.increment(ip);
     socket.data.token = token.data;
     socket.data.roomId = null;
+    socket.data.ip = ip;
     next();
   });
 
   io.on('connection', (socket: PokerSocket) => {
-    const { token } = socket.data;
+    const { token, ip } = socket.data;
+    const bucket = new TokenBucket(LIMITS.burst, LIMITS.perSecond);
+    let violations = 0;
     const currentRoom = () => (socket.data.roomId ? manager.get(socket.data.roomId) : undefined);
 
     /**
@@ -104,6 +139,12 @@ export function registerSocketHandlers(io: PokerServer, manager: RoomManager): v
           const respond = (response: Ack) => {
             if (typeof reply === 'function') (reply as (r: Ack) => void)(response);
           };
+          // Limite de débit : au-delà, refus ; un client qui insiste est déconnecté.
+          if (!bucket.take()) {
+            violations++;
+            if (violations > LIMITS.maxViolations) socket.disconnect(true);
+            return respond({ ok: false, error: 'RATE_LIMITED' });
+          }
           try {
             if (schema === null) return respond(handler(undefined as never));
             const parsed = schema.safeParse(args[0]);
@@ -132,14 +173,24 @@ export function registerSocketHandlers(io: PokerServer, manager: RoomManager): v
       room.disconnect(token);
     }
 
-    socket.on('lobby:subscribe', (reply) => {
+    on('lobby:subscribe', null, () => {
       void socket.join(LOBBY);
-      if (typeof reply === 'function') reply({ ok: true, rooms: manager.publicSummaries() });
+      return {
+        ok: true,
+        rooms: manager.publicSummaries(),
+        leaderboard: stats.leaderboard(),
+        // Identifiant public du joueur, pour qu'il se repère dans le classement.
+        you: playerKey(token),
+      } as Ack;
     });
-    socket.on('lobby:unsubscribe', () => void socket.leave(LOBBY));
+    on('lobby:unsubscribe', null, () => {
+      void socket.leave(LOBBY);
+      return { ok: true };
+    });
 
     on('room:create', createRoomSchema, (config) => {
-      const room = manager.create(config, token);
+      const room = manager.create(config, token, ip);
+      if (room === 'LIMIT_REACHED') return { ok: false, error: 'LIMIT_REACHED' };
       return { ok: true, roomId: room.id } as Ack;
     });
 
@@ -183,6 +234,9 @@ export function registerSocketHandlers(io: PokerServer, manager: RoomManager): v
       inRoom((room) => room.setSittingOut(token, sittingOut)),
     );
 
-    socket.on('disconnect', detach);
+    socket.on('disconnect', () => {
+      connectionsPerIp.decrement(ip);
+      detach();
+    });
   });
 }
